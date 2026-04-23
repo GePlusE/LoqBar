@@ -109,6 +109,12 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Color(nsColor: .windowBackgroundColor))
         }
+        .onAppear {
+            appModel.bringAuxiliaryWindowToFront(titleContains: "Settings")
+        }
+        .onDisappear {
+            appModel.restoreMenuBarPresentationIfPossible()
+        }
     }
 
     private var activePane: SettingsPane {
@@ -175,9 +181,13 @@ struct SettingsView: View {
             settingsField("Storage root folder") {
                 pathField(
                     text: $appModel.settings.storageRootFolder,
-                    placeholder: "Storage root folder"
+                    placeholder: "Storage root folder",
+                    chooseLabel: "Choose…",
+                    secondaryLabel: "New Folder…"
                 ) {
                     appModel.chooseStorageRootFolder()
+                } secondaryAction: {
+                    appModel.createStorageRootFolder()
                 }
             }
 
@@ -237,7 +247,8 @@ struct SettingsView: View {
             settingsField("Optional external whisper-cli path") {
                 pathField(
                     text: $appModel.settings.transcriptionExecutablePath,
-                    placeholder: "Optional external whisper-cli path"
+                    placeholder: "Optional external whisper-cli path",
+                    chooseLabel: "Choose…"
                 ) {
                     appModel.chooseExternalWhisperExecutable()
                 }
@@ -246,7 +257,8 @@ struct SettingsView: View {
             settingsField("Optional external model path") {
                 pathField(
                     text: $appModel.settings.transcriptionModelPath,
-                    placeholder: "Optional external model path"
+                    placeholder: "Optional external model path",
+                    chooseLabel: "Choose…"
                 ) {
                     appModel.chooseExternalModelFile()
                 }
@@ -305,15 +317,25 @@ struct SettingsView: View {
     private func pathField(
         text: Binding<String>,
         placeholder: String,
-        chooseAction: @escaping () -> Void
+        chooseLabel: String,
+        secondaryLabel: String? = nil,
+        chooseAction: @escaping () -> Void,
+        secondaryAction: (() -> Void)? = nil
     ) -> some View {
         HStack(spacing: 10) {
             TextField(placeholder, text: text)
                 .textFieldStyle(.roundedBorder)
-            Button("Choose…") {
+            Button(chooseLabel) {
                 chooseAction()
             }
             .buttonStyle(.bordered)
+
+            if let secondaryLabel, let secondaryAction {
+                Button(secondaryLabel) {
+                    secondaryAction()
+                }
+                .buttonStyle(.bordered)
+            }
         }
     }
 }

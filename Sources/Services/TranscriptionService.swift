@@ -74,8 +74,16 @@ struct TranscriptionService {
     func transcribe(plan: TranscriptionPlan, session: SessionRecord, settings: AppSettings) throws -> TranscriptContent {
         let start = session.startedAt
         guard let whisperConfiguration = WhisperConfiguration.from(settings: settings) else {
+            let setupMessage: String
+
+            if settings.hasExternalTranscriptionPaths {
+                setupMessage = "Recording finished and audio was saved, but LoqBar could not use the configured transcription files. Open Settings > Transcription and check the whisper-cli path and model path, then retry transcription later."
+            } else {
+                setupMessage = "Recording finished and audio was saved, but transcription is not set up yet. Open Settings > Transcription to choose an existing whisper-cli and model, or install managed files into the hidden .loqbar folder inside your storage root, then retry later."
+            }
+
             throw AppError.transcriptionConfigurationMissing(
-                "Recording finished and audio was saved, but LoqBar could not find transcription files. Configure external `whisper-cli` and model paths, or place managed files inside `\(settings.managedTranscriptionRootFolder)`, then retry transcription later."
+                setupMessage
             )
         }
         let execution = try runTranscription(plan: plan, start: start, configuration: whisperConfiguration)

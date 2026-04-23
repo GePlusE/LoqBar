@@ -281,12 +281,61 @@ final class AppModel: ObservableObject {
         NSApp.terminate(nil)
     }
 
+    func prepareToPresentAuxiliaryWindow() {
+        _ = NSApp.setActivationPolicy(.regular)
+        NSRunningApplication.current.activate(options: [.activateAllWindows])
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func bringAuxiliaryWindowToFront(titleContains titleFragment: String, remainingAttempts: Int = 8) {
+        prepareToPresentAuxiliaryWindow()
+
+        let matchingWindow = NSApp.windows.first { window in
+            window.title.localizedCaseInsensitiveContains(titleFragment)
+        }
+
+        if let matchingWindow {
+            matchingWindow.collectionBehavior.insert(.moveToActiveSpace)
+            matchingWindow.level = .floating
+            matchingWindow.orderFrontRegardless()
+            matchingWindow.makeKeyAndOrderFront(nil)
+            matchingWindow.orderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        guard remainingAttempts > 0 else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+            self?.bringAuxiliaryWindowToFront(
+                titleContains: titleFragment,
+                remainingAttempts: remainingAttempts - 1
+            )
+        }
+    }
+
+    func restoreMenuBarPresentationIfPossible() {
+        let auxiliaryWindowsAreVisible = NSApp.windows.contains { window in
+            (window.title.localizedCaseInsensitiveContains("Settings") ||
+             window.title.localizedCaseInsensitiveContains("Recent Sessions")) &&
+            window.isVisible
+        }
+
+        guard !auxiliaryWindowsAreVisible else { return }
+
+        _ = NSApp.setActivationPolicy(.accessory)
+    }
+
     func chooseStorageRootFolder() {
+        prepareToPresentAuxiliaryWindow()
+
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
+        panel.prompt = "Choose Folder"
+        panel.message = "Choose the root folder where LoqBar should store recordings, transcripts, and managed files."
         panel.directoryURL = URL(fileURLWithPath: settings.storageRootFolder, isDirectory: true)
 
         if panel.runModal() == .OK, let url = panel.url {
@@ -294,11 +343,38 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func createStorageRootFolder() {
+        prepareToPresentAuxiliaryWindow()
+
+        let currentRoot = URL(fileURLWithPath: settings.storageRootFolder, isDirectory: true)
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.prompt = "Create Folder"
+        panel.title = "Create Storage Root Folder"
+        panel.message = "Create a new root folder for LoqBar recordings, transcripts, and managed files."
+        panel.nameFieldLabel = "Folder name:"
+        panel.nameFieldStringValue = currentRoot.lastPathComponent.isEmpty ? "LoqBar" : currentRoot.lastPathComponent
+        panel.directoryURL = currentRoot.deletingLastPathComponent()
+        panel.isExtensionHidden = true
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            settings.storageRootFolder = url.path
+        } catch {
+            present(error: .storageSetupFailed("LoqBar could not create the selected storage folder: \(error.localizedDescription)"))
+        }
+    }
+
     func chooseExternalWhisperExecutable() {
+        prepareToPresentAuxiliaryWindow()
+
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
+        panel.prompt = "Choose Executable"
         panel.directoryURL = URL(fileURLWithPath: settings.transcriptionExecutablePath.nilIfEmpty ?? StoragePaths.appSupportFolder.path)
 
         if panel.runModal() == .OK, let url = panel.url {
@@ -307,10 +383,13 @@ final class AppModel: ObservableObject {
     }
 
     func chooseExternalModelFile() {
+        prepareToPresentAuxiliaryWindow()
+
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
+        panel.prompt = "Choose Model File"
         panel.directoryURL = URL(fileURLWithPath: settings.transcriptionModelPath.nilIfEmpty ?? settings.storageRootFolder)
 
         if panel.runModal() == .OK, let url = panel.url {

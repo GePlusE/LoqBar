@@ -17,6 +17,12 @@ struct SessionHistoryView: View {
             }
             .navigationTitle("Recent Sessions")
         }
+        .onAppear {
+            appModel.bringAuxiliaryWindowToFront(titleContains: "Recent Sessions")
+        }
+        .onDisappear {
+            appModel.restoreMenuBarPresentationIfPossible()
+        }
     }
 }
 

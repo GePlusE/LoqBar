@@ -125,21 +125,15 @@ struct MenuBarView: View {
     private var quickActions: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button("Open Settings") {
-                NSRunningApplication.current.activate(options: [.activateAllWindows])
+                appModel.prepareToPresentAuxiliaryWindow()
                 openWindow(id: "settings")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    NSApp.windows.forEach { window in
-                        if window.title.localizedCaseInsensitiveContains("Settings") {
-                            window.orderFrontRegardless()
-                            window.makeKeyAndOrderFront(nil)
-                        }
-                    }
-                    NSApp.activate(ignoringOtherApps: true)
-                }
+                appModel.bringAuxiliaryWindowToFront(titleContains: "Settings")
             }
 
             Button("Open Recent Sessions") {
+                appModel.prepareToPresentAuxiliaryWindow()
                 openWindow(id: "history")
+                appModel.bringAuxiliaryWindowToFront(titleContains: "Recent Sessions")
             }
 
             Button("Open Transcript Folder") {
