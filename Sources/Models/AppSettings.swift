@@ -1,8 +1,7 @@
 import Foundation
 
 struct AppSettings: Codable {
-    var transcriptOutputFolder: String
-    var recordingOutputFolder: String
+    var storageRootFolder: String
     var audioRetentionPolicy: AudioRetentionPolicy
     var defaultCaptureMode: CaptureMode
     var customVocabularyEntries: [String]
@@ -15,8 +14,7 @@ struct AppSettings: Codable {
     var firstRunCompleted: Bool
 
     static let defaultValue = AppSettings(
-        transcriptOutputFolder: StoragePaths.defaultTranscriptFolder.path,
-        recordingOutputFolder: StoragePaths.defaultRecordingFolder.path,
+        storageRootFolder: StoragePaths.defaultStorageRootFolder.path,
         audioRetentionPolicy: .days90,
         defaultCaptureMode: .auto,
         customVocabularyEntries: [],
@@ -28,6 +26,18 @@ struct AppSettings: Codable {
         launchAtLoginEnabled: false,
         firstRunCompleted: false
     )
+
+    var transcriptOutputFolder: String {
+        URL(fileURLWithPath: storageRootFolder, isDirectory: true)
+            .appendingPathComponent("Transcripts", isDirectory: true)
+            .path
+    }
+
+    var recordingOutputFolder: String {
+        URL(fileURLWithPath: storageRootFolder, isDirectory: true)
+            .appendingPathComponent("Recordings", isDirectory: true)
+            .path
+    }
 }
 
 enum AudioRetentionPolicy: String, Codable, CaseIterable, Identifiable {

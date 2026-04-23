@@ -17,10 +17,7 @@ struct SettingsView: View {
                     }
                 }
 
-                TextField("Transcript output folder", text: $appModel.settings.transcriptOutputFolder)
-                    .textFieldStyle(.roundedBorder)
-
-                TextField("Recording output folder", text: $appModel.settings.recordingOutputFolder)
+                TextField("Storage root folder", text: $appModel.settings.storageRootFolder)
                     .textFieldStyle(.roundedBorder)
             }
 

@@ -69,10 +69,8 @@ enum StoragePaths {
     static let appSupportFolder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("LoqBar", isDirectory: true)
 
-    static let defaultTranscriptFolder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("LoqBar Transcripts", isDirectory: true)
-    static let defaultRecordingFolder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("LoqBar Recordings", isDirectory: true)
+    static let defaultStorageRootFolder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("LoqBar", isDirectory: true)
     static let transcriptionScratchFolder = appSupportFolder.appendingPathComponent("TranscriptionScratch", isDirectory: true)
 
     static let settingsFile = appSupportFolder.appendingPathComponent("settings.json")
