@@ -298,7 +298,11 @@ final class AppModel: ObservableObject {
 
         do {
             let plan = transcriptionService.makePlan(for: sessions[sessionIndex])
-            let content = transcriptionService.transcribe(plan: plan, session: sessions[sessionIndex])
+            let content = transcriptionService.transcribe(
+                plan: plan,
+                session: sessions[sessionIndex],
+                settings: settings
+            )
             let transcript = try transcriptExporter.exportTranscript(
                 for: sessions[sessionIndex],
                 settings: settings,

@@ -35,6 +35,15 @@ struct SettingsView: View {
                 TextField("Local model identifier", text: $appModel.settings.transcriptionModelIdentifier)
                     .textFieldStyle(.roundedBorder)
 
+                TextField("whisper-cli path", text: $appModel.settings.transcriptionExecutablePath)
+                    .textFieldStyle(.roundedBorder)
+
+                TextField("Model file path", text: $appModel.settings.transcriptionModelPath)
+                    .textFieldStyle(.roundedBorder)
+
+                TextField("Language (`auto`, `en`, `de`, ...)", text: $appModel.settings.transcriptionLanguage)
+                    .textFieldStyle(.roundedBorder)
+
                 TextEditor(text: Binding(
                     get: { appModel.settings.customVocabularyEntries.joined(separator: "\n") },
                     set: { appModel.settings.customVocabularyEntries = $0.split(separator: "\n").map(String.init) }

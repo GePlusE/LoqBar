@@ -6,6 +6,9 @@ struct AppSettings: Codable {
     var defaultCaptureMode: CaptureMode
     var customVocabularyEntries: [String]
     var transcriptionModelIdentifier: String
+    var transcriptionExecutablePath: String
+    var transcriptionModelPath: String
+    var transcriptionLanguage: String
     var autoCleanupEnabled: Bool
     var launchAtLoginEnabled: Bool
     var firstRunCompleted: Bool
@@ -16,6 +19,9 @@ struct AppSettings: Codable {
         defaultCaptureMode: .auto,
         customVocabularyEntries: [],
         transcriptionModelIdentifier: "whisper-large-v3-turbo-q5",
+        transcriptionExecutablePath: "",
+        transcriptionModelPath: "",
+        transcriptionLanguage: "auto",
         autoCleanupEnabled: true,
         launchAtLoginEnabled: false,
         firstRunCompleted: false

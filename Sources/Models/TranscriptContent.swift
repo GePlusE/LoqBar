@@ -20,4 +20,5 @@ struct TranscriptSegment {
 struct TranscriptionAnalysis {
     let primarySources: [String]
     let notes: [String]
+    let engineDescription: String
 }

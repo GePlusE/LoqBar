@@ -57,6 +57,7 @@ struct TranscriptExporter {
         audio_file: "\(session.audioPath ?? "")"
         system_audio_file: "\(session.systemAudioPath ?? "")"
         preferred_transcript_sources: "\(sourceSummary)"
+        transcription_engine: "\(content.analysis.engineDescription)"
         ---
 
         # Transcript
