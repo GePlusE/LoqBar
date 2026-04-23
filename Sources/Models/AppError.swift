@@ -4,6 +4,8 @@ enum AppError: Error {
     case microphonePermissionMissing
     case screenRecordingPermissionMissing
     case callAudioCaptureUnavailable
+    case recordingStartupFailed(String)
+    case recordingStopFailed(String)
     case loginItemUpdateFailed(String)
     case transcriptExportFailed(String)
     case storageSetupFailed(String)
@@ -16,6 +18,10 @@ enum AppError: Error {
             return "Screen Recording Permission Needed"
         case .callAudioCaptureUnavailable:
             return "Call Capture Unavailable"
+        case .recordingStartupFailed:
+            return "Recording Could Not Start"
+        case .recordingStopFailed:
+            return "Recording Could Not Stop Cleanly"
         case .loginItemUpdateFailed:
             return "Launch at Login Could Not Be Updated"
         case .transcriptExportFailed:
@@ -33,6 +39,10 @@ enum AppError: Error {
             return "Enable Screen Recording so LoqBar can attempt app or system audio capture for calls."
         case .callAudioCaptureUnavailable:
             return "Teams or system audio capture is not available yet. Use Local Meeting Mode as a fallback while the call-capture spike is implemented."
+        case let .recordingStartupFailed(details):
+            return details
+        case let .recordingStopFailed(details):
+            return details
         case let .loginItemUpdateFailed(details):
             return details
         case let .transcriptExportFailed(details):

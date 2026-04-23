@@ -15,19 +15,22 @@ final class AppModel: ObservableObject {
     private let sessionStore: SessionStore
     private let transcriptExporter: TranscriptExporter
     private let captureService: CaptureService
+    private let recordingCoordinator: AudioCaptureCoordinator
 
     init(
         permissionsService: PermissionsService = PermissionsService(),
         loginItemService: LoginItemService = LoginItemService(),
         sessionStore: SessionStore = SessionStore(),
         transcriptExporter: TranscriptExporter = TranscriptExporter(),
-        captureService: CaptureService = CaptureService()
+        captureService: CaptureService = CaptureService(),
+        recordingCoordinator: AudioCaptureCoordinator = AudioCaptureCoordinator()
     ) {
         self.permissionsService = permissionsService
         self.loginItemService = loginItemService
         self.sessionStore = sessionStore
         self.transcriptExporter = transcriptExporter
         self.captureService = captureService
+        self.recordingCoordinator = recordingCoordinator
 
         loadInitialState()
     }
@@ -108,36 +111,40 @@ final class AppModel: ObservableObject {
             audioSourceType: capturePlan.audioSource
         )
         session.status = .recording
-        session.notes = capturePlan.userFacingSummary
+        session.notes = "Starting capture..."
         sessions.insert(session, at: 0)
         persist()
+
+        Task {
+            do {
+                let activeCapture = try await recordingCoordinator.start(
+                    sessionID: session.id,
+                    mode: capturePlan.mode
+                )
+                apply(activeCapture, to: session.id, fallbackNote: capturePlan.userFacingSummary)
+            } catch {
+                markSessionFailed(session.id, error: .recordingStartupFailed(error.localizedDescription))
+            }
+        }
     }
 
     func stopRecording() {
-        guard let sessionIndex = sessions.firstIndex(where: \.isActive) else { return }
+        guard let session = activeSession else { return }
 
-        sessions[sessionIndex].status = .processing
-        sessions[sessionIndex].endedAt = Date()
-        sessions[sessionIndex].durationSeconds = max(
-            Int(sessions[sessionIndex].endedAt?.timeIntervalSince(sessions[sessionIndex].startedAt) ?? 0),
-            1
-        )
-        processingMessage = "Generating sample transcript export"
+        if let sessionIndex = sessions.firstIndex(where: { $0.id == session.id }) {
+            sessions[sessionIndex].status = .processing
+            sessions[sessionIndex].notes = "Stopping capture..."
+            persist()
+        }
 
-        do {
-            let transcript = try transcriptExporter.exportTranscript(for: sessions[sessionIndex], settings: settings)
-            sessions[sessionIndex].status = .completed
-            sessions[sessionIndex].transcriptPath = transcript.path
-            sessions[sessionIndex].warningCount = transcript.warningCount
-            sessions[sessionIndex].speakerCount = transcript.speakersDetected
-            sessions[sessionIndex].notes = transcript.summary
-            processingMessage = "Transcript exported"
-            persist()
-        } catch {
-            sessions[sessionIndex].status = .failed
-            processingMessage = "Export failed"
-            present(error: .transcriptExportFailed(error.localizedDescription))
-            persist()
+        Task {
+            do {
+                let activeCapture = try await recordingCoordinator.stop()
+                apply(activeCapture, to: session.id, fallbackNote: "Capture finished.")
+                finalizeSession(session.id)
+            } catch {
+                markSessionFailed(session.id, error: .recordingStopFailed(error.localizedDescription))
+            }
         }
     }
 
@@ -175,6 +182,50 @@ final class AppModel: ObservableObject {
             title: error.title,
             message: error.recoverySuggestion
         )
+    }
+
+    private func apply(_ activeCapture: ActiveCaptureSession, to sessionID: UUID, fallbackNote: String) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[index].audioPath = activeCapture.microphoneFileURL.path
+        sessions[index].systemAudioPath = activeCapture.systemAudioFileURL?.path
+        sessions[index].notes = activeCapture.summary.isEmpty ? fallbackNote : activeCapture.summary
+        persist()
+    }
+
+    private func finalizeSession(_ sessionID: UUID) {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+
+        sessions[sessionIndex].endedAt = Date()
+        sessions[sessionIndex].durationSeconds = max(
+            Int(sessions[sessionIndex].endedAt?.timeIntervalSince(sessions[sessionIndex].startedAt) ?? 0),
+            1
+        )
+        processingMessage = "Generating transcript export"
+
+        do {
+            let transcript = try transcriptExporter.exportTranscript(for: sessions[sessionIndex], settings: settings)
+            sessions[sessionIndex].status = .completed
+            sessions[sessionIndex].transcriptPath = transcript.path
+            sessions[sessionIndex].warningCount = transcript.warningCount
+            sessions[sessionIndex].speakerCount = transcript.speakersDetected
+            sessions[sessionIndex].notes = transcript.summary
+            processingMessage = "Transcript exported"
+            persist()
+        } catch {
+            sessions[sessionIndex].status = .failed
+            processingMessage = "Export failed"
+            present(error: .transcriptExportFailed(error.localizedDescription))
+            persist()
+        }
+    }
+
+    private func markSessionFailed(_ sessionID: UUID, error: AppError) {
+        if let index = sessions.firstIndex(where: { $0.id == sessionID }) {
+            sessions[index].status = .failed
+            sessions[index].notes = error.recoverySuggestion
+            persist()
+        }
+        present(error: error)
     }
 }
 

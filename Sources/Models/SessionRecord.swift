@@ -12,6 +12,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
     var audioSourceType: AudioSourceType
     var transcriptPath: String?
     var audioPath: String?
+    var systemAudioPath: String?
     var language: String
     var speakerCount: Int
     var aliasMapping: [String: String]
@@ -36,6 +37,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
             audioSourceType: audioSourceType,
             transcriptPath: nil,
             audioPath: nil,
+            systemAudioPath: nil,
             language: Locale.current.language.languageCode?.identifier ?? "en",
             speakerCount: 0,
             aliasMapping: [:],
