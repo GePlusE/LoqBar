@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct MenuBarView: View {
     @EnvironmentObject private var appModel: AppModel
@@ -125,8 +126,15 @@ struct MenuBarView: View {
     private var quickActions: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button("Open Settings") {
-                NSApp.activate(ignoringOtherApps: true)
+                NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
                 openSettings()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    NSApp.windows.forEach { window in
+                        window.orderFrontRegardless()
+                        window.makeKeyAndOrderFront(nil)
+                    }
+                    NSApp.activate(ignoringOtherApps: true)
+                }
             }
 
             Button("Open Recent Sessions") {

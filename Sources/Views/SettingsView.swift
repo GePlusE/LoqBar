@@ -1,129 +1,247 @@
 import SwiftUI
 
+private enum SettingsPane: String, CaseIterable, Identifiable {
+    case general
+    case storage
+    case transcription
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .general:
+            return "General"
+        case .storage:
+            return "Storage"
+        case .transcription:
+            return "Transcription"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .general:
+            return "gearshape"
+        case .storage:
+            return "externaldrive"
+        case .transcription:
+            return "waveform.and.magnifyingglass"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .general:
+            return "Capture defaults and startup behavior."
+        case .storage:
+            return "Where LoqBar stores recordings and transcripts."
+        case .transcription:
+            return "How local transcription is configured."
+        }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var appModel: AppModel
+    @State private var selectedPane: SettingsPane? = .general
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                settingsSection("General") {
-                    Toggle("Launch at login", isOn: Binding(
-                        get: { appModel.settings.launchAtLoginEnabled },
-                        set: { appModel.updateLaunchAtLogin($0) }
-                    ))
+        NavigationSplitView {
+            List(SettingsPane.allCases, selection: $selectedPane) { pane in
+                Label(pane.title, systemImage: pane.iconName)
+                    .tag(pane)
+            }
+            .navigationSplitViewColumnWidth(min: 220, ideal: 240)
+        } detail: {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    detailHeader
+                    detailContent
 
-                    settingsRow("Default capture mode") {
-                        Picker("Default capture mode", selection: $appModel.settings.defaultCaptureMode) {
-                            ForEach(CaptureMode.allCases) { mode in
-                                Text(mode.title).tag(mode)
-                            }
+                    HStack {
+                        Spacer()
+                        Button("Save Settings") {
+                            appModel.persist()
                         }
-                        .labelsHidden()
-                    }
-
-                    settingsRow("Storage root folder") {
-                        TextField("Storage root folder", text: $appModel.settings.storageRootFolder)
-                            .textFieldStyle(.roundedBorder)
+                        .buttonStyle(.borderedProminent)
                     }
                 }
+                .padding(28)
+                .frame(maxWidth: 760, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color(nsColor: .windowBackgroundColor))
+        }
+    }
 
-                settingsSection("Storage") {
-                    settingsRow("Audio retention") {
-                        Picker("Audio retention", selection: $appModel.settings.audioRetentionPolicy) {
-                            ForEach(AudioRetentionPolicy.allCases) { policy in
-                                Text(policy.title).tag(policy)
-                            }
-                        }
-                        .labelsHidden()
-                    }
+    private var activePane: SettingsPane {
+        selectedPane ?? .general
+    }
 
-                    Toggle("Automatic cleanup", isOn: $appModel.settings.autoCleanupEnabled)
-                }
+    private var detailHeader: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                Image(systemName: activePane.iconName)
+                    .font(.system(size: 26, weight: .semibold))
+                    .frame(width: 56, height: 56)
+                    .background(Color.secondary.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
 
-                settingsSection("Transcription") {
-                    settingsRow("Model identifier") {
-                        TextField("Local model identifier", text: $appModel.settings.transcriptionModelIdentifier)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    settingsRow("Language") {
-                        TextField("auto, en, de, ...", text: $appModel.settings.transcriptionLanguage)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    infoText("LoqBar can use either externally configured transcription files or the hidden managed `.loqbar` folder inside the storage root.")
-                    monoText(appModel.settings.managedTranscriptionRootFolder)
-
-                    settingsRow("External whisper-cli") {
-                        TextField("Optional external whisper-cli path", text: $appModel.settings.transcriptionExecutablePath)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    settingsRow("External model") {
-                        TextField("Optional external model path", text: $appModel.settings.transcriptionModelPath)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    if appModel.settings.hasExternalTranscriptionPaths {
-                        infoText("External transcription paths are configured, so LoqBar will prefer those files and leave your existing setup untouched.")
-                    } else {
-                        infoText("If no external paths are configured, LoqBar will look for managed files inside the hidden `.loqbar` folder.")
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Custom vocabulary")
-                            .font(.subheadline.weight(.semibold))
-                        TextEditor(text: Binding(
-                            get: { appModel.settings.customVocabularyEntries.joined(separator: "\n") },
-                            set: { appModel.settings.customVocabularyEntries = $0.split(separator: "\n").map(String.init) }
-                        ))
-                        .frame(minHeight: 120)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
-                        )
-                    }
-                }
-
-                HStack {
-                    Spacer()
-                    Button("Save Settings") {
-                        appModel.persist()
-                    }
-                    .buttonStyle(.borderedProminent)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(activePane.title)
+                        .font(.largeTitle.weight(.semibold))
+                    Text(activePane.summary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .padding(24)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 24))
     }
 
-    private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+    @ViewBuilder
+    private var detailContent: some View {
+        switch activePane {
+        case .general:
+            generalPane
+        case .storage:
+            storagePane
+        case .transcription:
+            transcriptionPane
+        }
+    }
+
+    private var generalPane: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Toggle("Launch at login", isOn: Binding(
+                get: { appModel.settings.launchAtLoginEnabled },
+                set: { appModel.updateLaunchAtLogin($0) }
+            ))
+
+            settingsField("Default capture mode") {
+                Picker("Default capture mode", selection: $appModel.settings.defaultCaptureMode) {
+                    ForEach(CaptureMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 340, alignment: .leading)
+            }
+        }
+    }
+
+    private var storagePane: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            settingsField("Storage root folder") {
+                TextField("Storage root folder", text: $appModel.settings.storageRootFolder)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            infoCard(
+                title: "Folder Structure",
+                body: """
+                LoqBar will create these folders automatically:
+
+                \(appModel.settings.recordingOutputFolder)
+                \(appModel.settings.transcriptOutputFolder)
+                """
+            )
+
+            settingsField("Audio retention") {
+                Picker("Audio retention", selection: $appModel.settings.audioRetentionPolicy) {
+                    ForEach(AudioRetentionPolicy.allCases) { policy in
+                        Text(policy.title).tag(policy)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 340, alignment: .leading)
+            }
+
+            Toggle("Automatic cleanup", isOn: $appModel.settings.autoCleanupEnabled)
+        }
+    }
+
+    private var transcriptionPane: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            settingsField("Model identifier") {
+                TextField("Local model identifier", text: $appModel.settings.transcriptionModelIdentifier)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            settingsField("Language") {
+                TextField("auto, en, de, ...", text: $appModel.settings.transcriptionLanguage)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            infoCard(
+                title: "Managed Transcription Folder",
+                body: """
+                If no external paths are configured, LoqBar will use the hidden managed folder inside your storage root:
+
+                \(appModel.settings.managedTranscriptionRootFolder)
+                """
+            )
+
+            settingsField("Optional external whisper-cli path") {
+                TextField("Optional external whisper-cli path", text: $appModel.settings.transcriptionExecutablePath)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            settingsField("Optional external model path") {
+                TextField("Optional external model path", text: $appModel.settings.transcriptionModelPath)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            infoText(
+                appModel.settings.hasExternalTranscriptionPaths
+                ? "External transcription paths are configured, so LoqBar will prefer those files and leave your existing setup untouched."
+                : "No external transcription paths are configured right now."
+            )
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Custom vocabulary")
+                    .font(.headline)
+                TextEditor(text: Binding(
+                    get: { appModel.settings.customVocabularyEntries.joined(separator: "\n") },
+                    set: { appModel.settings.customVocabularyEntries = $0.split(separator: "\n").map(String.init) }
+                ))
+                .frame(minHeight: 140)
+                .padding(8)
+                .background(Color.black.opacity(0.14))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+        }
+    }
+
+    private func settingsField<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.title3.weight(.semibold))
+                .font(.headline)
             content()
         }
     }
 
-    private func settingsRow<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.subheadline.weight(.semibold))
-            content()
+    private func infoCard(title: String, body: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+            Text(body)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
         }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     private func infoText(_ text: String) -> some View {
         Text(text)
             .font(.footnote)
             .foregroundStyle(.secondary)
-    }
-
-    private func monoText(_ text: String) -> some View {
-        Text(text)
-            .font(.footnote.monospaced())
-            .foregroundStyle(.secondary)
-            .textSelection(.enabled)
     }
 }
