@@ -1,5 +1,9 @@
 import AVFoundation
 import Foundation
+#if canImport(ScreenCaptureKit)
+import CoreMedia
+import ScreenCaptureKit
+#endif
 
 @MainActor
 final class AudioCaptureCoordinator {
@@ -17,15 +21,35 @@ final class AudioCaptureCoordinator {
         let microphoneRecorder = MicrophoneRecorder(outputURL: microphoneURL)
         try microphoneRecorder.start()
 
-        let capture = ActiveCaptureSession(
-            sessionID: sessionID,
-            mode: mode,
-            microphoneRecorder: microphoneRecorder,
-            screenRecorder: nil,
-            microphoneFileURL: microphoneURL,
-            systemAudioFileURL: nil,
-            summary: "Microphone recording active."
-        )
+        let capture: ActiveCaptureSession
+        if mode == .call {
+            do {
+                let systemAudioURL = sessionFolder.appendingPathComponent("system-audio.caf")
+                let screenRecorder = try await ScreenCaptureRecorder.start(outputURL: systemAudioURL)
+                capture = ActiveCaptureSession(
+                    sessionID: sessionID,
+                    mode: mode,
+                    microphoneRecorder: microphoneRecorder,
+                    screenRecorder: screenRecorder,
+                    microphoneFileURL: microphoneURL,
+                    systemAudioFileURL: systemAudioURL,
+                    summary: screenRecorder.summary
+                )
+            } catch {
+                try? microphoneRecorder.stop()
+                throw error
+            }
+        } else {
+            capture = ActiveCaptureSession(
+                sessionID: sessionID,
+                mode: mode,
+                microphoneRecorder: microphoneRecorder,
+                screenRecorder: nil,
+                microphoneFileURL: microphoneURL,
+                systemAudioFileURL: nil,
+                summary: "Microphone recording active."
+            )
+        }
 
         activeCapture = capture
         return capture
@@ -41,9 +65,14 @@ final class AudioCaptureCoordinator {
             try await screenRecorder.stop()
         }
 
-        capture.summary = capture.mode == .localMeeting
-            ? "Microphone feasibility spike recorded to a local audio file."
-            : "Microphone recording finished."
+        capture.summary = switch capture.mode {
+        case .localMeeting:
+            "Microphone feasibility spike recorded to a local audio file."
+        case .call:
+            "Microphone and system audio feasibility spike recorded to local files."
+        case .auto:
+            "Recording finished."
+        }
         activeCapture = nil
         return capture
     }
@@ -116,5 +145,151 @@ final class MicrophoneRecorder {
 
 @MainActor
 final class ScreenCaptureRecorder {
-    func stop() async throws {}
+    let summary: String
+
+    private let stream: SCStream?
+    private let streamOutput: ScreenCaptureAudioOutput?
+
+    private init(summary: String, stream: SCStream?, streamOutput: ScreenCaptureAudioOutput?) {
+        self.summary = summary
+        self.stream = stream
+        self.streamOutput = streamOutput
+    }
+
+    static func start(outputURL: URL) async throws -> ScreenCaptureRecorder {
+        #if canImport(ScreenCaptureKit)
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        guard let display = content.displays.first else {
+            throw AppError.callAudioCaptureUnavailable
+        }
+
+        let teamsBundleIdentifiers = ["com.microsoft.teams2", "com.microsoft.teams"]
+        let teamsApp = content.applications.first { application in
+            teamsBundleIdentifiers.contains(application.bundleIdentifier)
+        }
+
+        let filter = SCContentFilter(
+            display: display,
+            excludingApplications: [],
+            exceptingWindows: []
+        )
+
+        let configuration = SCStreamConfiguration()
+        configuration.capturesAudio = true
+        configuration.excludesCurrentProcessAudio = false
+        configuration.sampleRate = 48_000
+        configuration.channelCount = 2
+        configuration.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+        configuration.width = 2
+        configuration.height = 2
+
+        let streamOutput = try ScreenCaptureAudioOutput(outputURL: outputURL)
+        let stream = SCStream(filter: filter, configuration: configuration, delegate: nil)
+        try stream.addStreamOutput(streamOutput, type: .audio, sampleHandlerQueue: streamOutput.queue)
+        try await stream.startCapture()
+
+        let summary = teamsApp == nil
+            ? "Call capture active. System audio is streaming, but a Teams process was not detected."
+            : "Call capture active. Teams was detected and ScreenCaptureKit system audio is streaming."
+
+        return ScreenCaptureRecorder(summary: summary, stream: stream, streamOutput: streamOutput)
+        #else
+        throw AppError.callAudioCaptureUnavailable
+        #endif
+    }
+
+    func stop() async throws {
+        #if canImport(ScreenCaptureKit)
+        if let stream {
+            try await stream.stopCapture()
+        }
+        streamOutput?.finish()
+        #endif
+    }
 }
+
+#if canImport(ScreenCaptureKit)
+private final class ScreenCaptureAudioOutput: NSObject, SCStreamOutput {
+    let queue = DispatchQueue(label: "LoqBar.ScreenCaptureAudio")
+
+    private let writer: ScreenCaptureAudioFileWriter
+
+    init(outputURL: URL) throws {
+        writer = try ScreenCaptureAudioFileWriter(outputURL: outputURL)
+    }
+
+    func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
+        guard outputType == .audio else { return }
+        writer.append(sampleBuffer)
+    }
+
+    func finish() {
+        writer.finish()
+    }
+}
+
+private final class ScreenCaptureAudioFileWriter {
+    private let outputURL: URL
+    private var audioFile: AVAudioFile?
+
+    init(outputURL: URL) throws {
+        self.outputURL = outputURL
+        try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    }
+
+    func append(_ sampleBuffer: CMSampleBuffer) {
+        guard sampleBuffer.isValid else { return }
+
+        do {
+            let pcmBuffer = try makePCMBuffer(from: sampleBuffer)
+            if audioFile == nil {
+                audioFile = try AVAudioFile(
+                    forWriting: outputURL,
+                    settings: pcmBuffer.format.settings,
+                    commonFormat: pcmBuffer.format.commonFormat,
+                    interleaved: pcmBuffer.format.isInterleaved
+                )
+            }
+            try audioFile?.write(from: pcmBuffer)
+        } catch {
+            NSLog("LoqBar screen audio write failed: \(error.localizedDescription)")
+        }
+    }
+
+    func finish() {
+        audioFile = nil
+    }
+
+    private func makePCMBuffer(from sampleBuffer: CMSampleBuffer) throws -> AVAudioPCMBuffer {
+        guard
+            let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
+            let streamDescription = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)
+        else {
+            throw AppError.recordingStartupFailed("LoqBar could not read ScreenCaptureKit audio format details.")
+        }
+
+        guard let format = AVAudioFormat(streamDescription: streamDescription) else {
+            throw AppError.recordingStartupFailed("LoqBar could not convert ScreenCaptureKit audio into an AVAudioFormat.")
+        }
+
+        let frameCount = AVAudioFrameCount(CMSampleBufferGetNumSamples(sampleBuffer))
+        guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            throw AppError.recordingStartupFailed("LoqBar could not allocate a PCM buffer for system audio.")
+        }
+
+        pcmBuffer.frameLength = frameCount
+        let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
+            sampleBuffer,
+            at: 0,
+            frameCount: Int32(frameCount),
+            into: pcmBuffer.mutableAudioBufferList
+        )
+
+        guard status == noErr else {
+            throw AppError.recordingStartupFailed("LoqBar could not copy system audio samples into a writable buffer.")
+        }
+
+        return pcmBuffer
+    }
+}
+#endif

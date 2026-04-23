@@ -25,6 +25,8 @@ struct SessionDetailView: View {
                         LabeledContent("Status", value: session.status.title)
                         LabeledContent("Capture mode", value: session.captureMode.title)
                         LabeledContent("Audio source", value: session.audioSourceType.title)
+                        LabeledContent("Microphone audio", value: session.audioPath ?? "Not available")
+                        LabeledContent("System audio", value: session.systemAudioPath ?? "Not available")
                         LabeledContent("Transcript", value: session.transcriptPath ?? "Not exported yet")
                     }
 

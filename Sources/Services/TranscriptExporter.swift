@@ -47,6 +47,7 @@ struct TranscriptExporter {
           Speaker2: ""
         confidence_warnings: 1
         audio_file: "\(session.audioPath ?? "")"
+        system_audio_file: "\(session.systemAudioPath ?? "")"
         ---
 
         # Transcript

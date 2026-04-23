@@ -43,18 +43,18 @@ struct CaptureService {
             return CapturePlan(
                 mode: .call,
                 audioSource: .appAudioPlusMicrophone,
-                isAvailable: false,
-                unavailableReason: .callAudioCaptureUnavailable,
-                userFacingSummary: "Call capture path identified, but the Teams/headphones spike still needs implementation."
+                isAvailable: true,
+                unavailableReason: nil,
+                userFacingSummary: "Call Mode will attempt ScreenCaptureKit system audio plus microphone recording."
             )
         case .auto:
             if permissionState.screenCaptureAuthorized {
                 return CapturePlan(
                     mode: .call,
                     audioSource: .appAudioPlusMicrophone,
-                    isAvailable: false,
-                    unavailableReason: .callAudioCaptureUnavailable,
-                    userFacingSummary: "Auto selected Call Mode, but the system-audio capture pipeline is still a placeholder."
+                    isAvailable: true,
+                    unavailableReason: nil,
+                    userFacingSummary: "Auto selected Call Mode and will attempt ScreenCaptureKit system audio capture."
                 )
             }
 
