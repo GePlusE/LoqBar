@@ -25,6 +25,15 @@ struct SessionStore {
         NSWorkspace.shared.open(URL(fileURLWithPath: settings.transcriptOutputFolder, isDirectory: true))
     }
 
+    func revealFile(at path: String) {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+
+    func openRecordingFolder(for session: SessionRecord) {
+        let sessionFolder = StoragePaths.sessionRecordingFolder(for: session.id)
+        NSWorkspace.shared.open(sessionFolder)
+    }
+
     private func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
         do {
             let data = try Data(contentsOf: url)

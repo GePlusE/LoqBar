@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -37,6 +38,10 @@ final class AppModel: ObservableObject {
 
     var activeSession: SessionRecord? {
         sessions.first(where: \.isActive)
+    }
+
+    var latestSession: SessionRecord? {
+        sessions.sorted(by: { $0.startedAt > $1.startedAt }).first
     }
 
     var menuBarIconName: String {
@@ -185,6 +190,25 @@ final class AppModel: ObservableObject {
 
     func openTranscriptFolder() {
         sessionStore.openTranscriptFolder(settings: settings)
+    }
+
+    func openLatestRecordingFolder() {
+        guard let session = latestSession else { return }
+        sessionStore.openRecordingFolder(for: session)
+    }
+
+    func revealLatestMicrophoneRecording() {
+        guard let path = latestSession?.audioPath else { return }
+        sessionStore.revealFile(at: path)
+    }
+
+    func revealLatestSystemAudioRecording() {
+        guard let path = latestSession?.systemAudioPath else { return }
+        sessionStore.revealFile(at: path)
+    }
+
+    func quitApp() {
+        NSApp.terminate(nil)
     }
 
     func persist() {

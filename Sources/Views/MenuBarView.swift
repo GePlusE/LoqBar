@@ -112,6 +112,21 @@ struct MenuBarView: View {
                 appModel.openTranscriptFolder()
             }
 
+            Button("Open Latest Recording Folder") {
+                appModel.openLatestRecordingFolder()
+            }
+            .disabled(appModel.latestSession == nil)
+
+            Button("Reveal Latest Microphone File") {
+                appModel.revealLatestMicrophoneRecording()
+            }
+            .disabled(appModel.latestSession?.audioPath == nil)
+
+            Button("Reveal Latest System Audio File") {
+                appModel.revealLatestSystemAudioRecording()
+            }
+            .disabled(appModel.latestSession?.systemAudioPath == nil)
+
             if appModel.firstRunState.needsOnboarding {
                 Divider()
 
@@ -121,6 +136,12 @@ struct MenuBarView: View {
                 } label: {
                     Text("Finish First-Run Setup")
                 }
+            }
+
+            Divider()
+
+            Button("Quit LoqBar") {
+                appModel.quitApp()
             }
         }
         .buttonStyle(.plain)
