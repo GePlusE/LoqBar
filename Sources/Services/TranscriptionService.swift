@@ -71,10 +71,14 @@ struct TranscriptionService {
         }
     }
 
-    func transcribe(plan: TranscriptionPlan, session: SessionRecord, settings: AppSettings) -> TranscriptContent {
+    func transcribe(plan: TranscriptionPlan, session: SessionRecord, settings: AppSettings) throws -> TranscriptContent {
         let start = session.startedAt
-        let whisperConfiguration = WhisperConfiguration.from(settings: settings)
-        let execution = runTranscription(plan: plan, start: start, configuration: whisperConfiguration)
+        guard let whisperConfiguration = WhisperConfiguration.from(settings: settings) else {
+            throw AppError.transcriptionConfigurationMissing(
+                "Recording finished and audio was saved, but transcription is not configured yet. Set both the `whisper-cli path` and `Model file path` in Settings, then retry transcription later."
+            )
+        }
+        let execution = try runTranscription(plan: plan, start: start, configuration: whisperConfiguration)
 
         return TranscriptContent(
             title: session.title,
@@ -89,39 +93,15 @@ struct TranscriptionService {
     private func runTranscription(
         plan: TranscriptionPlan,
         start: Date,
-        configuration: WhisperConfiguration?
-    ) -> (segments: [TranscriptSegment], speakersDetected: Int, summary: String, analysis: TranscriptionAnalysis) {
-        guard let configuration else {
-            let notes = plan.notes + [
-                "whisper.cpp is not configured yet. Set both the whisper executable path and model file path in Settings to enable real local transcription."
-            ]
-            let analysis = TranscriptionAnalysis(
-                primarySources: plan.preferredSources.map(\.rawValue),
-                notes: notes,
-                engineDescription: "placeholder"
-            )
-            let segments = buildPlaceholderSegments(for: plan, start: start)
-            return (segments, inferredSpeakerCount(for: plan), summaryText(for: plan, engineDescription: "placeholder"), analysis)
-        }
-
-        do {
-            let merged = try transcribePreferredSources(plan: plan, sessionStart: start, configuration: configuration)
-            let analysis = TranscriptionAnalysis(
-                primarySources: plan.preferredSources.map(\.rawValue),
-                notes: plan.notes,
-                engineDescription: merged.engineDescription
-            )
-            return (merged.segments, merged.speakersDetected, summaryText(for: plan, engineDescription: merged.engineDescription), analysis)
-        } catch {
-            let notes = plan.notes + ["whisper.cpp execution failed, so LoqBar exported a placeholder transcript instead: \(error.localizedDescription)"]
-            let analysis = TranscriptionAnalysis(
-                primarySources: plan.preferredSources.map(\.rawValue),
-                notes: notes,
-                engineDescription: "placeholder"
-            )
-            let segments = buildPlaceholderSegments(for: plan, start: start)
-            return (segments, inferredSpeakerCount(for: plan), summaryText(for: plan, engineDescription: "placeholder"), analysis)
-        }
+        configuration: WhisperConfiguration
+    ) throws -> (segments: [TranscriptSegment], speakersDetected: Int, summary: String, analysis: TranscriptionAnalysis) {
+        let merged = try transcribePreferredSources(plan: plan, sessionStart: start, configuration: configuration)
+        let analysis = TranscriptionAnalysis(
+            primarySources: plan.preferredSources.map(\.rawValue),
+            notes: plan.notes,
+            engineDescription: merged.engineDescription
+        )
+        return (merged.segments, merged.speakersDetected, summaryText(for: plan, engineDescription: merged.engineDescription), analysis)
     }
 
     private func transcribePreferredSources(
@@ -168,96 +148,11 @@ struct TranscriptionService {
         }
 
         if sortedSegments.isEmpty {
-            throw AppError.transcriptExportFailed("whisper.cpp ran, but produced no transcript segments for the selected audio sources.")
+            throw AppError.transcriptionExecutionFailed("whisper.cpp ran, but produced no transcript segments for the selected audio sources.")
         }
 
         let speakersDetected = Set(sortedSegments.map(\.speakerLabel)).count
         return (sortedSegments, max(speakersDetected, 1), engineDescription)
-    }
-
-    private func buildPlaceholderSegments(for plan: TranscriptionPlan, start: Date) -> [TranscriptSegment] {
-        switch plan.audioSourceType {
-        case .systemAudioOnly:
-            return [
-                TranscriptSegment(
-                    absoluteTimestamp: start.addingTimeInterval(2),
-                    relativeOffset: 2,
-                    speakerLabel: "Speaker1",
-                    text: "Placeholder transcript for the system-audio-only diagnostic recording.",
-                    lowConfidence: false
-                ),
-                TranscriptSegment(
-                    absoluteTimestamp: start.addingTimeInterval(7),
-                    relativeOffset: 7,
-                    speakerLabel: "Speaker1",
-                    text: "The next step is to send this source through whisper.cpp and verify it maps cleanly to the remote participant track.",
-                    lowConfidence: true
-                ),
-            ]
-
-        case .microphoneOnly:
-            return [
-                TranscriptSegment(
-                    absoluteTimestamp: start.addingTimeInterval(2),
-                    relativeOffset: 2,
-                    speakerLabel: "Speaker1",
-                    text: "Placeholder transcript for the microphone-only diagnostic recording.",
-                    lowConfidence: false
-                ),
-                TranscriptSegment(
-                    absoluteTimestamp: start.addingTimeInterval(6),
-                    relativeOffset: 6,
-                    speakerLabel: "Speaker1",
-                    text: "This path should represent the local speaker when call playback is isolated away from the microphone.",
-                    lowConfidence: true
-                ),
-            ]
-
-        case .appAudioPlusMicrophone, .separatedSystemAndMicrophone:
-            return [
-                TranscriptSegment(
-                    absoluteTimestamp: start.addingTimeInterval(3),
-                    relativeOffset: 3,
-                    speakerLabel: "Speaker1",
-                    text: "Placeholder transcript for the remote-participant system-audio source.",
-                    lowConfidence: false
-                ),
-                TranscriptSegment(
-                    absoluteTimestamp: start.addingTimeInterval(9),
-                    relativeOffset: 9,
-                    speakerLabel: "Speaker2",
-                    text: "Placeholder transcript for the local-speaker microphone source.",
-                    lowConfidence: false
-                ),
-                TranscriptSegment(
-                    absoluteTimestamp: start.addingTimeInterval(15),
-                    relativeOffset: 15,
-                    speakerLabel: "Speaker1",
-                    text: "Whisper.cpp integration should transcribe these sources separately before any diarization or merge step.",
-                    lowConfidence: true
-                ),
-            ]
-
-        case .unknown:
-            return [
-                TranscriptSegment(
-                    absoluteTimestamp: start.addingTimeInterval(2),
-                    relativeOffset: 2,
-                    speakerLabel: "Speaker1",
-                    text: "Placeholder transcript for the available local source.",
-                    lowConfidence: true
-                ),
-            ]
-        }
-    }
-
-    private func inferredSpeakerCount(for plan: TranscriptionPlan) -> Int {
-        switch plan.audioSourceType {
-        case .appAudioPlusMicrophone, .separatedSystemAndMicrophone:
-            return 2
-        default:
-            return 1
-        }
     }
 
     private func summaryText(for plan: TranscriptionPlan, engineDescription: String) -> String {

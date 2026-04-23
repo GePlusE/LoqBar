@@ -6,6 +6,8 @@ enum AppError: Error {
     case callAudioCaptureUnavailable
     case recordingStartupFailed(String)
     case recordingStopFailed(String)
+    case transcriptionConfigurationMissing(String)
+    case transcriptionExecutionFailed(String)
     case loginItemUpdateFailed(String)
     case transcriptExportFailed(String)
     case storageSetupFailed(String)
@@ -22,6 +24,10 @@ enum AppError: Error {
             return "Recording Could Not Start"
         case .recordingStopFailed:
             return "Recording Could Not Stop Cleanly"
+        case .transcriptionConfigurationMissing:
+            return "Transcription Needs Setup"
+        case .transcriptionExecutionFailed:
+            return "Transcription Could Not Run"
         case .loginItemUpdateFailed:
             return "Launch at Login Could Not Be Updated"
         case .transcriptExportFailed:
@@ -42,6 +48,10 @@ enum AppError: Error {
         case let .recordingStartupFailed(details):
             return details
         case let .recordingStopFailed(details):
+            return details
+        case let .transcriptionConfigurationMissing(details):
+            return details
+        case let .transcriptionExecutionFailed(details):
             return details
         case let .loginItemUpdateFailed(details):
             return details

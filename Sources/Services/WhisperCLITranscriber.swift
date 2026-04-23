@@ -4,13 +4,13 @@ struct WhisperCLITranscriber {
     func transcribe(audioFileURL: URL, configuration: WhisperConfiguration) throws -> WhisperTranscription {
         let fileManager = FileManager.default
         guard fileManager.isExecutableFile(atPath: configuration.executableURL.path) else {
-            throw AppError.transcriptExportFailed("The configured whisper executable is not executable: \(configuration.executableURL.path)")
+            throw AppError.transcriptionConfigurationMissing("The configured whisper executable is not usable. Check the `whisper-cli path` in Settings: \(configuration.executableURL.path)")
         }
         guard fileManager.fileExists(atPath: configuration.modelURL.path) else {
-            throw AppError.transcriptExportFailed("The configured whisper model file does not exist: \(configuration.modelURL.path)")
+            throw AppError.transcriptionConfigurationMissing("The configured whisper model file does not exist. Check the `Model file path` in Settings: \(configuration.modelURL.path)")
         }
         guard fileManager.fileExists(atPath: audioFileURL.path) else {
-            throw AppError.transcriptExportFailed("The audio file to transcribe does not exist: \(audioFileURL.path)")
+            throw AppError.transcriptionExecutionFailed("The audio file to transcribe could not be found: \(audioFileURL.path)")
         }
 
         let outputDirectory = StoragePaths.transcriptionScratchFolder.appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -51,7 +51,7 @@ struct WhisperCLITranscriber {
             let message = stderrText.isEmpty
                 ? "whisper-cli exited with status \(process.terminationStatus)."
                 : "whisper-cli exited with status \(process.terminationStatus): \(stderrText)"
-            throw AppError.transcriptExportFailed(message)
+            throw AppError.transcriptionExecutionFailed(message)
         }
 
         let jsonData = try? Data(contentsOf: jsonURL)

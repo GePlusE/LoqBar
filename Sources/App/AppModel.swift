@@ -298,7 +298,7 @@ final class AppModel: ObservableObject {
 
         do {
             let plan = transcriptionService.makePlan(for: sessions[sessionIndex])
-            let content = transcriptionService.transcribe(
+            let content = try transcriptionService.transcribe(
                 plan: plan,
                 session: sessions[sessionIndex],
                 settings: settings
@@ -315,11 +315,13 @@ final class AppModel: ObservableObject {
             sessions[sessionIndex].notes = ([transcript.summary] + transcript.planNotes).joined(separator: " ")
             processingMessage = "Transcript exported"
             persist()
+        } catch let error as AppError {
+            markSessionCompletedWithTranscriptionIssue(sessionID, error: error)
         } catch {
-            sessions[sessionIndex].status = .failed
-            processingMessage = "Export failed"
-            present(error: .transcriptExportFailed(error.localizedDescription))
-            persist()
+            markSessionCompletedWithTranscriptionIssue(
+                sessionID,
+                error: .transcriptionExecutionFailed("Recording finished and audio was saved, but transcription could not complete: \(error.localizedDescription)")
+            )
         }
     }
 
@@ -329,6 +331,16 @@ final class AppModel: ObservableObject {
             sessions[index].notes = error.recoverySuggestion
             persist()
         }
+        present(error: error)
+    }
+
+    private func markSessionCompletedWithTranscriptionIssue(_ sessionID: UUID, error: AppError) {
+        if let index = sessions.firstIndex(where: { $0.id == sessionID }) {
+            sessions[index].status = .completed
+            sessions[index].notes = "Recording saved. Transcription pending: \(error.recoverySuggestion)"
+            persist()
+        }
+        processingMessage = "Recording saved, transcription pending"
         present(error: error)
     }
 }
