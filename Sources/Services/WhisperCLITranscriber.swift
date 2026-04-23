@@ -16,6 +16,8 @@ struct WhisperCLITranscriber {
         let outputDirectory = StoragePaths.transcriptionScratchFolder.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try fileManager.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
+        let preparedAudioURL = try prepareAudioInputIfNeeded(audioFileURL, outputDirectory: outputDirectory)
+
         let outputBaseURL = outputDirectory.appendingPathComponent("transcript")
         let jsonURL = outputBaseURL.appendingPathExtension("json")
         let txtURL = outputBaseURL.appendingPathExtension("txt")
@@ -25,7 +27,8 @@ struct WhisperCLITranscriber {
 
         var arguments = [
             "-m", configuration.modelURL.path,
-            "-f", audioFileURL.path,
+            "-f", preparedAudioURL.path,
+            "-ng",
             "--output-json",
             "--output-txt",
             "--output-file", outputBaseURL.path
@@ -112,6 +115,45 @@ struct WhisperCLITranscriber {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return [] }
         return [WhisperSegment(startTime: 0, endTime: 0, text: normalized)]
+    }
+
+    private func prepareAudioInputIfNeeded(_ audioFileURL: URL, outputDirectory: URL) throws -> URL {
+        let supportedExtensions = ["wav", "flac", "mp3", "ogg"]
+        if supportedExtensions.contains(audioFileURL.pathExtension.lowercased()) {
+            return audioFileURL
+        }
+
+        let convertedURL = outputDirectory.appendingPathComponent(audioFileURL.deletingPathExtension().lastPathComponent)
+            .appendingPathExtension("wav")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
+        process.arguments = [
+            "-f", "WAVE",
+            "-d", "LEI16@16000",
+            "-c", "1",
+            audioFileURL.path,
+            convertedURL.path
+        ]
+
+        let stderr = Pipe()
+        process.standardError = stderr
+        process.standardOutput = Pipe()
+
+        try process.run()
+        process.waitUntilExit()
+
+        let errorText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        guard process.terminationStatus == 0 else {
+            let message = errorText.isEmpty
+                ? "LoqBar could not convert \(audioFileURL.lastPathComponent) into a transcription-friendly WAV file."
+                : "LoqBar could not convert \(audioFileURL.lastPathComponent) into WAV: \(errorText)"
+            throw AppError.transcriptionExecutionFailed(message)
+        }
+
+        return convertedURL
     }
 
     private func numberValue(_ value: Any?) -> Double? {

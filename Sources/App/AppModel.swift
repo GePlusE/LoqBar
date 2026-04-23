@@ -18,6 +18,7 @@ final class AppModel: ObservableObject {
     private let transcriptionService: TranscriptionService
     private let captureService: CaptureService
     private let recordingCoordinator: AudioCaptureCoordinator
+    private let audioStorageOptimizer: AudioStorageOptimizer
 
     init(
         permissionsService: PermissionsService = PermissionsService(),
@@ -26,7 +27,8 @@ final class AppModel: ObservableObject {
         transcriptExporter: TranscriptExporter = TranscriptExporter(),
         transcriptionService: TranscriptionService = TranscriptionService(),
         captureService: CaptureService = CaptureService(),
-        recordingCoordinator: AudioCaptureCoordinator = AudioCaptureCoordinator()
+        recordingCoordinator: AudioCaptureCoordinator = AudioCaptureCoordinator(),
+        audioStorageOptimizer: AudioStorageOptimizer = AudioStorageOptimizer()
     ) {
         self.permissionsService = permissionsService
         self.loginItemService = loginItemService
@@ -35,6 +37,7 @@ final class AppModel: ObservableObject {
         self.transcriptionService = transcriptionService
         self.captureService = captureService
         self.recordingCoordinator = recordingCoordinator
+        self.audioStorageOptimizer = audioStorageOptimizer
 
         loadInitialState()
     }
@@ -215,7 +218,13 @@ final class AppModel: ObservableObject {
         Task {
             do {
                 let activeCapture = try await recordingCoordinator.stop()
-                apply(activeCapture, to: session.id, fallbackNote: "Capture finished.")
+                let optimizedAudio = try? audioStorageOptimizer.optimize(activeCapture)
+                apply(
+                    activeCapture,
+                    optimizedAudio: optimizedAudio,
+                    to: session.id,
+                    fallbackNote: "Capture finished."
+                )
                 finalizeSession(session.id)
             } catch {
                 markSessionFailed(session.id, error: .recordingStopFailed(error.localizedDescription))
@@ -278,11 +287,21 @@ final class AppModel: ObservableObject {
         )
     }
 
-    private func apply(_ activeCapture: ActiveCaptureSession, to sessionID: UUID, fallbackNote: String) {
+    private func apply(
+        _ activeCapture: ActiveCaptureSession,
+        optimizedAudio: OptimizedAudioFiles? = nil,
+        to sessionID: UUID,
+        fallbackNote: String
+    ) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        sessions[index].audioPath = activeCapture.microphoneFileURL?.path
-        sessions[index].systemAudioPath = activeCapture.systemAudioFileURL?.path
-        sessions[index].notes = activeCapture.summary.isEmpty ? fallbackNote : activeCapture.summary
+        sessions[index].audioPath = optimizedAudio?.microphoneFileURL?.path ?? activeCapture.microphoneFileURL?.path
+        sessions[index].systemAudioPath = optimizedAudio?.systemAudioFileURL?.path ?? activeCapture.systemAudioFileURL?.path
+
+        let baseNote = activeCapture.summary.isEmpty ? fallbackNote : activeCapture.summary
+        let optimizationNote = optimizedAudio?.notes.joined(separator: " ") ?? ""
+        sessions[index].notes = [baseNote, optimizationNote]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
         persist()
     }
 
