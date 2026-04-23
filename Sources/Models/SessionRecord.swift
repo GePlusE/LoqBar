@@ -1,0 +1,58 @@
+import Foundation
+
+struct SessionRecord: Identifiable, Codable, Hashable {
+    var id: UUID
+    var title: String
+    var createdAt: Date
+    var startedAt: Date
+    var endedAt: Date?
+    var durationSeconds: Int
+    var status: SessionStatus
+    var captureMode: CaptureMode
+    var audioSourceType: AudioSourceType
+    var transcriptPath: String?
+    var audioPath: String?
+    var language: String
+    var speakerCount: Int
+    var aliasMapping: [String: String]
+    var warningCount: Int
+    var notes: String
+
+    var isActive: Bool {
+        status == .recording || status == .processing
+    }
+
+    static func newDraft(captureMode: CaptureMode, audioSourceType: AudioSourceType) -> SessionRecord {
+        let now = Date()
+        return SessionRecord(
+            id: UUID(),
+            title: "Untitled Session",
+            createdAt: now,
+            startedAt: now,
+            endedAt: nil,
+            durationSeconds: 0,
+            status: .idle,
+            captureMode: captureMode,
+            audioSourceType: audioSourceType,
+            transcriptPath: nil,
+            audioPath: nil,
+            language: Locale.current.language.languageCode?.identifier ?? "en",
+            speakerCount: 0,
+            aliasMapping: [:],
+            warningCount: 0,
+            notes: ""
+        )
+    }
+}
+
+enum SessionStatus: String, Codable, CaseIterable {
+    case idle
+    case recording
+    case processing
+    case completed
+    case failed
+
+    var title: String {
+        rawValue.capitalized
+    }
+}
