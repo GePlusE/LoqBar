@@ -96,34 +96,49 @@ final class AppModel: ObservableObject {
     func startRecording() {
         guard activeSession == nil else { return }
 
-        let capturePlan = captureService.planCapture(
-            requestedMode: settings.defaultCaptureMode,
-            permissionState: permissionState
-        )
-
-        guard capturePlan.isAvailable else {
-            present(error: capturePlan.unavailableReason ?? .callAudioCaptureUnavailable)
-            return
-        }
-
-        var session = SessionRecord.newDraft(
-            captureMode: capturePlan.mode,
-            audioSourceType: capturePlan.audioSource
-        )
-        session.status = .recording
-        session.notes = "Starting capture..."
-        sessions.insert(session, at: 0)
-        persist()
-
         Task {
+            let refreshedPermissions = await permissionsService.ensurePermissions(for: settings.defaultCaptureMode)
+
+            await MainActor.run {
+                permissionState = refreshedPermissions
+            }
+
+            let capturePlan = captureService.planCapture(
+                requestedMode: settings.defaultCaptureMode,
+                permissionState: refreshedPermissions
+            )
+
+            guard capturePlan.isAvailable else {
+                await MainActor.run {
+                    present(error: capturePlan.unavailableReason ?? .callAudioCaptureUnavailable)
+                }
+                return
+            }
+
+            var session = SessionRecord.newDraft(
+                captureMode: capturePlan.mode,
+                audioSourceType: capturePlan.audioSource
+            )
+            session.status = .recording
+            session.notes = "Starting capture..."
+
+            await MainActor.run {
+                sessions.insert(session, at: 0)
+                persist()
+            }
+
             do {
                 let activeCapture = try await recordingCoordinator.start(
                     sessionID: session.id,
                     mode: capturePlan.mode
                 )
-                apply(activeCapture, to: session.id, fallbackNote: capturePlan.userFacingSummary)
+                await MainActor.run {
+                    apply(activeCapture, to: session.id, fallbackNote: capturePlan.userFacingSummary)
+                }
             } catch {
-                markSessionFailed(session.id, error: .recordingStartupFailed(error.localizedDescription))
+                await MainActor.run {
+                    markSessionFailed(session.id, error: .recordingStartupFailed(error.localizedDescription))
+                }
             }
         }
     }
