@@ -73,7 +73,7 @@ struct AppSettings: Codable {
         return "ggml-\(normalized).bin"
     }
 
-    var hasLegacyManualTranscriptionPaths: Bool {
+    var hasExternalTranscriptionPaths: Bool {
         !transcriptionExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
         !transcriptionModelPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }

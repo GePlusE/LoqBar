@@ -38,7 +38,7 @@ struct SettingsView: View {
                 TextField("Language (`auto`, `en`, `de`, ...)", text: $appModel.settings.transcriptionLanguage)
                     .textFieldStyle(.roundedBorder)
 
-                Text("LoqBar manages `whisper-cli` and model files automatically inside a hidden folder within the storage root.")
+                Text("LoqBar can use either externally configured transcription files or the hidden managed `.loqbar` folder inside the storage root.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
@@ -47,8 +47,18 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
 
-                if appModel.settings.hasLegacyManualTranscriptionPaths {
-                    Text("Legacy manual transcription paths are still present in settings for compatibility, but the intended setup is the hidden `.loqbar` folder inside the storage root.")
+                TextField("Optional external whisper-cli path", text: $appModel.settings.transcriptionExecutablePath)
+                    .textFieldStyle(.roundedBorder)
+
+                TextField("Optional external model path", text: $appModel.settings.transcriptionModelPath)
+                    .textFieldStyle(.roundedBorder)
+
+                if appModel.settings.hasExternalTranscriptionPaths {
+                    Text("External transcription paths are configured, so LoqBar will prefer those files and leave your existing setup untouched.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("If no external paths are configured, LoqBar will look for managed files inside the hidden `.loqbar` folder.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

@@ -4,6 +4,7 @@ struct WhisperConfiguration {
     let executableURL: URL
     let modelURL: URL
     let language: String?
+    let source: WhisperConfigurationSource
 
     static func from(settings: AppSettings) -> WhisperConfiguration? {
         let fileManager = FileManager.default
@@ -16,16 +17,17 @@ struct WhisperConfiguration {
 
         let executablePath: String
         let modelPath: String
+        let source: WhisperConfigurationSource
 
-        if fileManager.fileExists(atPath: managedExecutablePath), fileManager.fileExists(atPath: managedModelPath) {
-            executablePath = managedExecutablePath
-            modelPath = managedModelPath
-        } else {
+        if !legacyExecutablePath.isEmpty, !legacyModelPath.isEmpty {
             executablePath = legacyExecutablePath
             modelPath = legacyModelPath
-        }
-
-        guard !executablePath.isEmpty, !modelPath.isEmpty else {
+            source = .external
+        } else if fileManager.fileExists(atPath: managedExecutablePath), fileManager.fileExists(atPath: managedModelPath) {
+            executablePath = managedExecutablePath
+            modelPath = managedModelPath
+            source = .managed
+        } else {
             return nil
         }
 
@@ -33,9 +35,15 @@ struct WhisperConfiguration {
         return WhisperConfiguration(
             executableURL: URL(fileURLWithPath: executablePath),
             modelURL: URL(fileURLWithPath: modelPath),
-            language: languageValue == "auto" || languageValue.isEmpty ? nil : languageValue
+            language: languageValue == "auto" || languageValue.isEmpty ? nil : languageValue,
+            source: source
         )
     }
+}
+
+enum WhisperConfigurationSource {
+    case external
+    case managed
 }
 
 struct WhisperSegment {
