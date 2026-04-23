@@ -131,6 +131,10 @@ struct MenuBarView: View {
                 appModel.openTranscriptFolder()
             }
 
+            Button("Open Recording Root Folder") {
+                appModel.openRecordingRootFolder()
+            }
+
             Button("Open Latest Recording Folder") {
                 appModel.openLatestRecordingFolder()
             }

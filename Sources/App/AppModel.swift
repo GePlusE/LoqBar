@@ -141,7 +141,8 @@ final class AppModel: ObservableObject {
             do {
                 let activeCapture = try await recordingCoordinator.start(
                     sessionID: session.id,
-                    mode: capturePlan.mode
+                    mode: capturePlan.mode,
+                    recordingRootFolderPath: settings.recordingOutputFolder
                 )
                 await MainActor.run {
                     apply(activeCapture, to: session.id, fallbackNote: capturePlan.userFacingSummary)
@@ -193,6 +194,7 @@ final class AppModel: ObservableObject {
                 let activeCapture = try await recordingCoordinator.start(
                     sessionID: session.id,
                     mode: capturePlan.mode,
+                    recordingRootFolderPath: settings.recordingOutputFolder,
                     diagnosticKind: diagnosticKind
                 )
                 await MainActor.run {
@@ -254,6 +256,10 @@ final class AppModel: ObservableObject {
 
     func openTranscriptFolder() {
         sessionStore.openTranscriptFolder(settings: settings)
+    }
+
+    func openRecordingRootFolder() {
+        sessionStore.openRecordingRootFolder(settings: settings)
     }
 
     func openLatestRecordingFolder() {

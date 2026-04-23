@@ -25,13 +25,24 @@ struct SessionStore {
         NSWorkspace.shared.open(URL(fileURLWithPath: settings.transcriptOutputFolder, isDirectory: true))
     }
 
+    func openRecordingRootFolder(settings: AppSettings) {
+        NSWorkspace.shared.open(URL(fileURLWithPath: settings.recordingOutputFolder, isDirectory: true))
+    }
+
     func revealFile(at path: String) {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
     func openRecordingFolder(for session: SessionRecord) {
-        let sessionFolder = StoragePaths.sessionRecordingFolder(for: session.id)
-        NSWorkspace.shared.open(sessionFolder)
+        if let audioPath = session.audioPath {
+            NSWorkspace.shared.open(URL(fileURLWithPath: audioPath).deletingLastPathComponent())
+            return
+        }
+
+        if let systemAudioPath = session.systemAudioPath {
+            NSWorkspace.shared.open(URL(fileURLWithPath: systemAudioPath).deletingLastPathComponent())
+            return
+        }
     }
 
     private func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
@@ -60,13 +71,15 @@ enum StoragePaths {
 
     static let defaultTranscriptFolder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("LoqBar Transcripts", isDirectory: true)
-    static let recordingsFolder = appSupportFolder.appendingPathComponent("Recordings", isDirectory: true)
+    static let defaultRecordingFolder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("LoqBar Recordings", isDirectory: true)
     static let transcriptionScratchFolder = appSupportFolder.appendingPathComponent("TranscriptionScratch", isDirectory: true)
 
     static let settingsFile = appSupportFolder.appendingPathComponent("settings.json")
     static let sessionsFile = appSupportFolder.appendingPathComponent("sessions.json")
 
-    static func sessionRecordingFolder(for sessionID: UUID) -> URL {
-        recordingsFolder.appendingPathComponent(sessionID.uuidString, isDirectory: true)
+    static func sessionRecordingFolder(rootFolderPath: String, for sessionID: UUID) -> URL {
+        URL(fileURLWithPath: rootFolderPath, isDirectory: true)
+            .appendingPathComponent(sessionID.uuidString, isDirectory: true)
     }
 }

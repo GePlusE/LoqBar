@@ -9,12 +9,17 @@ import ScreenCaptureKit
 final class AudioCaptureCoordinator {
     private var activeCapture: ActiveCaptureSession?
 
-    func start(sessionID: UUID, mode: CaptureMode, diagnosticKind: DiagnosticCaptureKind? = nil) async throws -> ActiveCaptureSession {
+    func start(
+        sessionID: UUID,
+        mode: CaptureMode,
+        recordingRootFolderPath: String,
+        diagnosticKind: DiagnosticCaptureKind? = nil
+    ) async throws -> ActiveCaptureSession {
         guard activeCapture == nil else {
             throw AppError.recordingStartupFailed("Another LoqBar session is already recording.")
         }
 
-        let sessionFolder = StoragePaths.sessionRecordingFolder(for: sessionID)
+        let sessionFolder = StoragePaths.sessionRecordingFolder(rootFolderPath: recordingRootFolderPath, for: sessionID)
         try FileManager.default.createDirectory(at: sessionFolder, withIntermediateDirectories: true)
 
         let microphoneURL = sessionFolder.appendingPathComponent("microphone.caf")

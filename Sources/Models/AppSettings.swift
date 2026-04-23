@@ -2,6 +2,7 @@ import Foundation
 
 struct AppSettings: Codable {
     var transcriptOutputFolder: String
+    var recordingOutputFolder: String
     var audioRetentionPolicy: AudioRetentionPolicy
     var defaultCaptureMode: CaptureMode
     var customVocabularyEntries: [String]
@@ -15,6 +16,7 @@ struct AppSettings: Codable {
 
     static let defaultValue = AppSettings(
         transcriptOutputFolder: StoragePaths.defaultTranscriptFolder.path,
+        recordingOutputFolder: StoragePaths.defaultRecordingFolder.path,
         audioRetentionPolicy: .days90,
         defaultCaptureMode: .auto,
         customVocabularyEntries: [],
