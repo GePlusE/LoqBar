@@ -125,6 +125,7 @@ struct MenuBarView: View {
     private var quickActions: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button("Open Settings") {
+                NSApp.activate(ignoringOtherApps: true)
                 openSettings()
             }
 
