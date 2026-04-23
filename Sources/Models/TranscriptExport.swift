@@ -5,4 +5,5 @@ struct TranscriptExport {
     let warningCount: Int
     let speakersDetected: Int
     let summary: String
+    let planNotes: [String]
 }

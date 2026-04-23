@@ -1,7 +1,7 @@
 import Foundation
 
 struct TranscriptExporter {
-    func exportTranscript(for session: SessionRecord, settings: AppSettings) throws -> TranscriptExport {
+    func exportTranscript(for session: SessionRecord, settings: AppSettings, content: TranscriptContent) throws -> TranscriptExport {
         let folderURL = URL(fileURLWithPath: settings.transcriptOutputFolder, isDirectory: true)
         try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
 
@@ -10,18 +10,19 @@ struct TranscriptExporter {
         let timestamp = formatter.string(from: session.startedAt)
         let fileURL = folderURL.appendingPathComponent("loqbar-\(timestamp).md")
 
-        let markdown = buildMarkdown(for: session)
+        let markdown = buildMarkdown(for: session, content: content)
         try markdown.write(to: fileURL, atomically: true, encoding: .utf8)
 
         return TranscriptExport(
             path: fileURL.path,
-            warningCount: 1,
-            speakersDetected: 2,
-            summary: "Sample local export complete. Recording and transcription engines still need implementation."
+            warningCount: content.warningCount,
+            speakersDetected: content.speakersDetected,
+            summary: content.summary,
+            planNotes: content.analysis.notes
         )
     }
 
-    private func buildMarkdown(for session: SessionRecord) -> String {
+    private func buildMarkdown(for session: SessionRecord, content: TranscriptContent) -> String {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
 
@@ -31,9 +32,16 @@ struct TranscriptExporter {
         let start = session.startedAt
         let end = session.endedAt ?? start
 
+        let sourceSummary = content.analysis.primarySources.joined(separator: ", ")
+        let analysisNotes = content.analysis.notes.map { "- \($0)" }.joined(separator: "\n")
+        let transcriptBody = content.segments.map { segment in
+            let marker = segment.lowConfidence ? "[low confidence] " : ""
+            return "[\(isoTimestamp(segment.absoluteTimestamp)) | +\(relativeTimestamp(segment.relativeOffset))] \(segment.speakerLabel): \(marker)\(segment.text)"
+        }.joined(separator: "\n\n")
+
         return """
         ---
-        title: \(session.title)
+        title: \(content.title)
         date: \(dateFormatter.string(from: start))
         start_time: "\(timeFormatter.string(from: start))"
         end_time: "\(timeFormatter.string(from: end))"
@@ -41,22 +49,23 @@ struct TranscriptExporter {
         language: \(session.language)
         capture_mode: \(session.captureMode.rawValue)
         audio_source: \(session.audioSourceType.rawValue)
-        speakers_detected: 2
+        speakers_detected: \(content.speakersDetected)
         speaker_aliases:
           Speaker1: ""
           Speaker2: ""
-        confidence_warnings: 1
+        confidence_warnings: \(content.warningCount)
         audio_file: "\(session.audioPath ?? "")"
         system_audio_file: "\(session.systemAudioPath ?? "")"
+        preferred_transcript_sources: "\(sourceSummary)"
         ---
 
         # Transcript
 
-        [\(isoTimestamp(start)) | +00:00:04] Speaker1: Sample transcript export created by the LoqBar scaffold.
+        \(transcriptBody)
 
-        [\(isoTimestamp(start.addingTimeInterval(8))) | +00:00:12] Speaker2: The real audio capture and local transcription pipeline still need to be implemented.
+        # Analysis Notes
 
-        [\(isoTimestamp(start.addingTimeInterval(28))) | +00:00:32] Speaker1: [low confidence] Teams headphone call capture should be validated as the first engineering spike.
+        \(analysisNotes)
         """
     }
 
@@ -64,5 +73,13 @@ struct TranscriptExporter {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         return formatter.string(from: date)
+    }
+
+    private func relativeTimestamp(_ interval: TimeInterval) -> String {
+        let totalSeconds = Int(interval.rounded())
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
     }
 }

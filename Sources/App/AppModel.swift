@@ -15,6 +15,7 @@ final class AppModel: ObservableObject {
     private let loginItemService: LoginItemService
     private let sessionStore: SessionStore
     private let transcriptExporter: TranscriptExporter
+    private let transcriptionService: TranscriptionService
     private let captureService: CaptureService
     private let recordingCoordinator: AudioCaptureCoordinator
 
@@ -23,6 +24,7 @@ final class AppModel: ObservableObject {
         loginItemService: LoginItemService = LoginItemService(),
         sessionStore: SessionStore = SessionStore(),
         transcriptExporter: TranscriptExporter = TranscriptExporter(),
+        transcriptionService: TranscriptionService = TranscriptionService(),
         captureService: CaptureService = CaptureService(),
         recordingCoordinator: AudioCaptureCoordinator = AudioCaptureCoordinator()
     ) {
@@ -30,6 +32,7 @@ final class AppModel: ObservableObject {
         self.loginItemService = loginItemService
         self.sessionStore = sessionStore
         self.transcriptExporter = transcriptExporter
+        self.transcriptionService = transcriptionService
         self.captureService = captureService
         self.recordingCoordinator = recordingCoordinator
 
@@ -294,12 +297,18 @@ final class AppModel: ObservableObject {
         processingMessage = "Generating transcript export"
 
         do {
-            let transcript = try transcriptExporter.exportTranscript(for: sessions[sessionIndex], settings: settings)
+            let plan = transcriptionService.makePlan(for: sessions[sessionIndex])
+            let content = transcriptionService.transcribe(plan: plan, session: sessions[sessionIndex])
+            let transcript = try transcriptExporter.exportTranscript(
+                for: sessions[sessionIndex],
+                settings: settings,
+                content: content
+            )
             sessions[sessionIndex].status = .completed
             sessions[sessionIndex].transcriptPath = transcript.path
             sessions[sessionIndex].warningCount = transcript.warningCount
             sessions[sessionIndex].speakerCount = transcript.speakersDetected
-            sessions[sessionIndex].notes = transcript.summary
+            sessions[sessionIndex].notes = ([transcript.summary] + transcript.planNotes).joined(separator: " ")
             processingMessage = "Transcript exported"
             persist()
         } catch {
