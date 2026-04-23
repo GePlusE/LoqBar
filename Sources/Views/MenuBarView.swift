@@ -123,6 +123,10 @@ struct MenuBarView: View {
 
     private var quickActions: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Button("Open Settings") {
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            }
+
             Button("Open Recent Sessions") {
                 openWindow(id: "history")
             }
