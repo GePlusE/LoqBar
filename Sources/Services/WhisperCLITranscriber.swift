@@ -4,10 +4,10 @@ struct WhisperCLITranscriber {
     func transcribe(audioFileURL: URL, configuration: WhisperConfiguration) throws -> WhisperTranscription {
         let fileManager = FileManager.default
         guard fileManager.isExecutableFile(atPath: configuration.executableURL.path) else {
-            throw AppError.transcriptionConfigurationMissing("The configured whisper executable is not usable. Check the `whisper-cli path` in Settings: \(configuration.executableURL.path)")
+            throw AppError.transcriptionConfigurationMissing("LoqBar found a transcription executable path, but it is not usable: \(configuration.executableURL.path)")
         }
         guard fileManager.fileExists(atPath: configuration.modelURL.path) else {
-            throw AppError.transcriptionConfigurationMissing("The configured whisper model file does not exist. Check the `Model file path` in Settings: \(configuration.modelURL.path)")
+            throw AppError.transcriptionConfigurationMissing("LoqBar could not find the managed transcription model file: \(configuration.modelURL.path)")
         }
         guard fileManager.fileExists(atPath: audioFileURL.path) else {
             throw AppError.transcriptionExecutionFailed("The audio file to transcribe could not be found: \(audioFileURL.path)")

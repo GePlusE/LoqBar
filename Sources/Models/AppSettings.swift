@@ -18,7 +18,7 @@ struct AppSettings: Codable {
         audioRetentionPolicy: .days90,
         defaultCaptureMode: .auto,
         customVocabularyEntries: [],
-        transcriptionModelIdentifier: "whisper-large-v3-turbo-q5",
+        transcriptionModelIdentifier: "base",
         transcriptionExecutablePath: "",
         transcriptionModelPath: "",
         transcriptionLanguage: "auto",
@@ -37,6 +37,45 @@ struct AppSettings: Codable {
         URL(fileURLWithPath: storageRootFolder, isDirectory: true)
             .appendingPathComponent("Recordings", isDirectory: true)
             .path
+    }
+
+    var managedTranscriptionRootFolder: String {
+        URL(fileURLWithPath: storageRootFolder, isDirectory: true)
+            .appendingPathComponent(".loqbar", isDirectory: true)
+            .path
+    }
+
+    var managedTranscriptionExecutablePath: String {
+        URL(fileURLWithPath: managedTranscriptionRootFolder, isDirectory: true)
+            .appendingPathComponent("bin", isDirectory: true)
+            .appendingPathComponent("whisper-cli")
+            .path
+    }
+
+    var managedTranscriptionModelPath: String {
+        URL(fileURLWithPath: managedTranscriptionRootFolder, isDirectory: true)
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent(managedTranscriptionModelFileName)
+            .path
+    }
+
+    private var managedTranscriptionModelFileName: String {
+        let normalized = transcriptionModelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if normalized.isEmpty || normalized == "whisper-large-v3-turbo-q5" {
+            return "ggml-base.bin"
+        }
+
+        if normalized.hasSuffix(".bin") || normalized.hasSuffix(".gguf") {
+            return normalized
+        }
+
+        return "ggml-\(normalized).bin"
+    }
+
+    var hasLegacyManualTranscriptionPaths: Bool {
+        !transcriptionExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+        !transcriptionModelPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

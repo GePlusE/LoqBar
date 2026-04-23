@@ -35,14 +35,23 @@ struct SettingsView: View {
                 TextField("Local model identifier", text: $appModel.settings.transcriptionModelIdentifier)
                     .textFieldStyle(.roundedBorder)
 
-                TextField("whisper-cli path", text: $appModel.settings.transcriptionExecutablePath)
-                    .textFieldStyle(.roundedBorder)
-
-                TextField("Model file path", text: $appModel.settings.transcriptionModelPath)
-                    .textFieldStyle(.roundedBorder)
-
                 TextField("Language (`auto`, `en`, `de`, ...)", text: $appModel.settings.transcriptionLanguage)
                     .textFieldStyle(.roundedBorder)
+
+                Text("LoqBar manages `whisper-cli` and model files automatically inside a hidden folder within the storage root.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Text(appModel.settings.managedTranscriptionRootFolder)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+
+                if appModel.settings.hasLegacyManualTranscriptionPaths {
+                    Text("Legacy manual transcription paths are still present in settings for compatibility, but the intended setup is the hidden `.loqbar` folder inside the storage root.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
 
                 TextEditor(text: Binding(
                     get: { appModel.settings.customVocabularyEntries.joined(separator: "\n") },

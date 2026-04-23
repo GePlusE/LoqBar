@@ -6,8 +6,24 @@ struct WhisperConfiguration {
     let language: String?
 
     static func from(settings: AppSettings) -> WhisperConfiguration? {
-        let executablePath = settings.transcriptionExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        let modelPath = settings.transcriptionModelPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fileManager = FileManager.default
+
+        let managedExecutablePath = settings.managedTranscriptionExecutablePath
+        let managedModelPath = settings.managedTranscriptionModelPath
+
+        let legacyExecutablePath = settings.transcriptionExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let legacyModelPath = settings.transcriptionModelPath.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let executablePath: String
+        let modelPath: String
+
+        if fileManager.fileExists(atPath: managedExecutablePath), fileManager.fileExists(atPath: managedModelPath) {
+            executablePath = managedExecutablePath
+            modelPath = managedModelPath
+        } else {
+            executablePath = legacyExecutablePath
+            modelPath = legacyModelPath
+        }
 
         guard !executablePath.isEmpty, !modelPath.isEmpty else {
             return nil

@@ -75,7 +75,7 @@ struct TranscriptionService {
         let start = session.startedAt
         guard let whisperConfiguration = WhisperConfiguration.from(settings: settings) else {
             throw AppError.transcriptionConfigurationMissing(
-                "Recording finished and audio was saved, but transcription is not configured yet. Set both the `whisper-cli path` and `Model file path` in Settings, then retry transcription later."
+                "Recording finished and audio was saved, but LoqBar could not find its managed transcription engine inside `\(settings.managedTranscriptionRootFolder)`. Install or copy `whisper-cli` and the model there, then retry transcription later."
             )
         }
         let execution = try runTranscription(plan: plan, start: start, configuration: whisperConfiguration)
