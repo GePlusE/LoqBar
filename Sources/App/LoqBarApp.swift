@@ -15,11 +15,12 @@ struct LoqBarApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Settings {
+        Window("LoqBar Settings", id: "settings") {
             SettingsView()
                 .environmentObject(appModel)
-                .frame(minWidth: 560, minHeight: 420)
+                .frame(minWidth: 900, minHeight: 620)
         }
+        .defaultSize(width: 980, height: 680)
 
         Window("Recent Sessions", id: "history") {
             SessionHistoryView()

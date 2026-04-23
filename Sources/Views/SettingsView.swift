@@ -1,5 +1,42 @@
 import SwiftUI
 
+private enum SettingsLanguage: String, CaseIterable, Identifiable {
+    case auto
+    case english = "en"
+    case german = "de"
+    case french = "fr"
+    case spanish = "es"
+    case italian = "it"
+    case dutch = "nl"
+    case portuguese = "pt"
+    case polish = "pl"
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .auto:
+            return "Auto Detect"
+        case .english:
+            return "English"
+        case .german:
+            return "German"
+        case .french:
+            return "French"
+        case .spanish:
+            return "Spanish"
+        case .italian:
+            return "Italian"
+        case .dutch:
+            return "Dutch"
+        case .portuguese:
+            return "Portuguese"
+        case .polish:
+            return "Polish"
+        }
+    }
+}
+
 private enum SettingsPane: String, CaseIterable, Identifiable {
     case general
     case storage
@@ -136,8 +173,12 @@ struct SettingsView: View {
     private var storagePane: some View {
         VStack(alignment: .leading, spacing: 18) {
             settingsField("Storage root folder") {
-                TextField("Storage root folder", text: $appModel.settings.storageRootFolder)
-                    .textFieldStyle(.roundedBorder)
+                pathField(
+                    text: $appModel.settings.storageRootFolder,
+                    placeholder: "Storage root folder"
+                ) {
+                    appModel.chooseStorageRootFolder()
+                }
             }
 
             infoCard(
@@ -172,8 +213,16 @@ struct SettingsView: View {
             }
 
             settingsField("Language") {
-                TextField("auto, en, de, ...", text: $appModel.settings.transcriptionLanguage)
-                    .textFieldStyle(.roundedBorder)
+                Picker("Language", selection: Binding(
+                    get: { SettingsLanguage(rawValue: appModel.settings.transcriptionLanguage) ?? .auto },
+                    set: { appModel.settings.transcriptionLanguage = $0.rawValue }
+                )) {
+                    ForEach(SettingsLanguage.allCases) { language in
+                        Text(language.title).tag(language)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 340, alignment: .leading)
             }
 
             infoCard(
@@ -186,13 +235,21 @@ struct SettingsView: View {
             )
 
             settingsField("Optional external whisper-cli path") {
-                TextField("Optional external whisper-cli path", text: $appModel.settings.transcriptionExecutablePath)
-                    .textFieldStyle(.roundedBorder)
+                pathField(
+                    text: $appModel.settings.transcriptionExecutablePath,
+                    placeholder: "Optional external whisper-cli path"
+                ) {
+                    appModel.chooseExternalWhisperExecutable()
+                }
             }
 
             settingsField("Optional external model path") {
-                TextField("Optional external model path", text: $appModel.settings.transcriptionModelPath)
-                    .textFieldStyle(.roundedBorder)
+                pathField(
+                    text: $appModel.settings.transcriptionModelPath,
+                    placeholder: "Optional external model path"
+                ) {
+                    appModel.chooseExternalModelFile()
+                }
             }
 
             infoText(
@@ -243,5 +300,20 @@ struct SettingsView: View {
         Text(text)
             .font(.footnote)
             .foregroundStyle(.secondary)
+    }
+
+    private func pathField(
+        text: Binding<String>,
+        placeholder: String,
+        chooseAction: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 10) {
+            TextField(placeholder, text: text)
+                .textFieldStyle(.roundedBorder)
+            Button("Choose…") {
+                chooseAction()
+            }
+            .buttonStyle(.bordered)
+        }
     }
 }

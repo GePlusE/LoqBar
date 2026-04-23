@@ -281,6 +281,43 @@ final class AppModel: ObservableObject {
         NSApp.terminate(nil)
     }
 
+    func chooseStorageRootFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: settings.storageRootFolder, isDirectory: true)
+
+        if panel.runModal() == .OK, let url = panel.url {
+            settings.storageRootFolder = url.path
+        }
+    }
+
+    func chooseExternalWhisperExecutable() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: settings.transcriptionExecutablePath.nilIfEmpty ?? StoragePaths.appSupportFolder.path)
+
+        if panel.runModal() == .OK, let url = panel.url {
+            settings.transcriptionExecutablePath = url.path
+        }
+    }
+
+    func chooseExternalModelFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: settings.transcriptionModelPath.nilIfEmpty ?? settings.storageRootFolder)
+
+        if panel.runModal() == .OK, let url = panel.url {
+            settings.transcriptionModelPath = url.path
+        }
+    }
+
     func persist() {
         sessionStore.save(settings: settings)
         sessionStore.save(sessions: sessions)

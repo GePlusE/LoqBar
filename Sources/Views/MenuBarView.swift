@@ -4,7 +4,6 @@ import AppKit
 struct MenuBarView: View {
     @EnvironmentObject private var appModel: AppModel
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -126,12 +125,14 @@ struct MenuBarView: View {
     private var quickActions: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button("Open Settings") {
-                NSRunningApplication.current.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
-                openSettings()
+                NSRunningApplication.current.activate(options: [.activateAllWindows])
+                openWindow(id: "settings")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                     NSApp.windows.forEach { window in
-                        window.orderFrontRegardless()
-                        window.makeKeyAndOrderFront(nil)
+                        if window.title.localizedCaseInsensitiveContains("Settings") {
+                            window.orderFrontRegardless()
+                            window.makeKeyAndOrderFront(nil)
+                        }
                     }
                     NSApp.activate(ignoringOtherApps: true)
                 }
