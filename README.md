@@ -8,21 +8,23 @@ This repository currently contains an MVP scaffold built in SwiftUI with:
 - first-run setup flow
 - settings and session history
 - capture mode selection (`Auto`, `Local Meeting`, `Call`)
+- isolated `Microphone Only Test` and `System Audio Only Test` diagnostics
 - permission and login-item service boundaries
-- transcript export model and sample export pipeline
-- explicit placeholder seams for the high-risk Teams/headphones audio-capture spike
+- validated microphone + ScreenCaptureKit capture spike
+- transcription planning seam for future whisper.cpp integration
 
 ## Current Status
 
-The app shell compiles as a Swift package and provides the product structure needed to implement the real recording and transcription pipeline next.
+The app shell compiles as a Swift package and now includes a validated split-source call-capture spike plus a transcription-planning layer that chooses which audio sources should feed later local inference.
 
 The following areas are intentionally scaffolded but not yet fully implemented:
 
-- microphone recording pipeline
-- ScreenCaptureKit-based call audio capture
-- whisper.cpp integration
+- final production-grade microphone capture tuning
+- production-grade ScreenCaptureKit call capture hardening
+- whisper.cpp execution and model management
 - speaker diarization
 - model download and offline inference
+- transcript merge logic across separately transcribed local and remote sources
 
 ## Build
 
@@ -30,11 +32,6 @@ The following areas are intentionally scaffolded but not yet fully implemented:
 swift build
 ```
 
-## Recommended Next Step
+## Validation
 
-Validate the `Call Mode` feasibility spike first:
-
-1. capture microphone input
-2. capture Teams/system audio while using headphones
-3. determine whether separate or mixed streams are more reliable
-4. finalize permission UX and fallback behavior
+The validated manual capture procedure is documented in [TESTING.md](/Users/gepluse/Coding/LoqBar/TESTING.md).
