@@ -67,4 +67,46 @@ struct CaptureService {
             )
         }
     }
+
+    func planDiagnosticCapture(kind: DiagnosticCaptureKind, permissionState: PermissionState) -> CapturePlan {
+        switch kind {
+        case .microphoneOnly:
+            guard permissionState.microphoneAuthorized else {
+                return CapturePlan(
+                    mode: .localMeeting,
+                    audioSource: .unknown,
+                    isAvailable: false,
+                    unavailableReason: .microphonePermissionMissing,
+                    userFacingSummary: "Microphone permission is required for the microphone-only test."
+                )
+            }
+
+            return CapturePlan(
+                mode: .localMeeting,
+                audioSource: .microphoneOnly,
+                isAvailable: true,
+                unavailableReason: nil,
+                userFacingSummary: "Diagnostic microphone-only recording active."
+            )
+
+        case .systemAudioOnly:
+            guard permissionState.screenCaptureAuthorized else {
+                return CapturePlan(
+                    mode: .call,
+                    audioSource: .unknown,
+                    isAvailable: false,
+                    unavailableReason: .screenRecordingPermissionMissing,
+                    userFacingSummary: "Screen Recording permission is required for the system-audio-only test."
+                )
+            }
+
+            return CapturePlan(
+                mode: .call,
+                audioSource: .systemAudioOnly,
+                isAvailable: true,
+                unavailableReason: nil,
+                userFacingSummary: "Diagnostic system-audio-only recording active."
+            )
+        }
+    }
 }

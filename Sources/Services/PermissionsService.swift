@@ -34,6 +34,25 @@ struct PermissionsService {
         )
     }
 
+    func ensurePermissions(for diagnosticKind: DiagnosticCaptureKind) async -> PermissionState {
+        let microphoneAuthorized: Bool
+        let screenCaptureAuthorized: Bool
+
+        switch diagnosticKind {
+        case .microphoneOnly:
+            microphoneAuthorized = await requestMicrophoneAccessIfNeeded()
+            screenCaptureAuthorized = screenCaptureAccessGranted()
+        case .systemAudioOnly:
+            microphoneAuthorized = currentState().microphoneAuthorized
+            screenCaptureAuthorized = requestScreenCaptureAccessIfNeeded()
+        }
+
+        return PermissionState(
+            microphoneAuthorized: microphoneAuthorized,
+            screenCaptureAuthorized: screenCaptureAuthorized
+        )
+    }
+
     func openRelevantSettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") else {
             return

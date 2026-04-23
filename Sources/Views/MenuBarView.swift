@@ -10,6 +10,7 @@ struct MenuBarView: View {
             modePicker
             sessionStatus
             controls
+            diagnostics
             quickActions
         }
         .padding(16)
@@ -100,6 +101,24 @@ struct MenuBarView: View {
             }
             .buttonStyle(.bordered)
         }
+    }
+
+    private var diagnostics: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Diagnostics")
+                .font(.headline)
+
+            Button("Start Microphone Only Test") {
+                appModel.startDiagnosticRecording(.microphoneOnly)
+            }
+            .disabled(appModel.activeSession != nil)
+
+            Button("Start System Audio Only Test") {
+                appModel.startDiagnosticRecording(.systemAudioOnly)
+            }
+            .disabled(appModel.activeSession != nil)
+        }
+        .buttonStyle(.plain)
     }
 
     private var quickActions: some View {

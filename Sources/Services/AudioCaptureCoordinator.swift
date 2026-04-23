@@ -9,7 +9,7 @@ import ScreenCaptureKit
 final class AudioCaptureCoordinator {
     private var activeCapture: ActiveCaptureSession?
 
-    func start(sessionID: UUID, mode: CaptureMode) async throws -> ActiveCaptureSession {
+    func start(sessionID: UUID, mode: CaptureMode, diagnosticKind: DiagnosticCaptureKind? = nil) async throws -> ActiveCaptureSession {
         guard activeCapture == nil else {
             throw AppError.recordingStartupFailed("Another LoqBar session is already recording.")
         }
@@ -18,36 +18,44 @@ final class AudioCaptureCoordinator {
         try FileManager.default.createDirectory(at: sessionFolder, withIntermediateDirectories: true)
 
         let microphoneURL = sessionFolder.appendingPathComponent("microphone.caf")
-        let microphoneRecorder = MicrophoneRecorder(outputURL: microphoneURL)
-        try microphoneRecorder.start()
+        let microphoneRecorder: MicrophoneRecorder?
+        if diagnosticKind != .systemAudioOnly {
+            let recorder = MicrophoneRecorder(outputURL: microphoneURL)
+            try recorder.start()
+            microphoneRecorder = recorder
+        } else {
+            microphoneRecorder = nil
+        }
 
         let capture: ActiveCaptureSession
-        if mode == .call {
+        if mode == .call || diagnosticKind == .systemAudioOnly {
             do {
                 let systemAudioURL = sessionFolder.appendingPathComponent("system-audio.caf")
                 let screenRecorder = try await ScreenCaptureRecorder.start(outputURL: systemAudioURL)
                 capture = ActiveCaptureSession(
                     sessionID: sessionID,
                     mode: mode,
+                    diagnosticKind: diagnosticKind,
                     microphoneRecorder: microphoneRecorder,
                     screenRecorder: screenRecorder,
-                    microphoneFileURL: microphoneURL,
+                    microphoneFileURL: microphoneRecorder == nil ? nil : microphoneURL,
                     systemAudioFileURL: systemAudioURL,
                     summary: screenRecorder.summary
                 )
             } catch {
-                try? microphoneRecorder.stop()
+                try? microphoneRecorder?.stop()
                 throw error
             }
         } else {
             capture = ActiveCaptureSession(
                 sessionID: sessionID,
                 mode: mode,
+                diagnosticKind: diagnosticKind,
                 microphoneRecorder: microphoneRecorder,
                 screenRecorder: nil,
                 microphoneFileURL: microphoneURL,
                 systemAudioFileURL: nil,
-                summary: "Microphone recording active."
+                summary: diagnosticKind == .microphoneOnly ? "Diagnostic microphone-only recording active." : "Microphone recording active."
             )
         }
 
@@ -60,19 +68,12 @@ final class AudioCaptureCoordinator {
             throw AppError.recordingStopFailed("No active LoqBar recording was found.")
         }
 
-        try capture.microphoneRecorder.stop()
+        try capture.microphoneRecorder?.stop()
         if let screenRecorder = capture.screenRecorder {
             try await screenRecorder.stop()
         }
 
-        capture.summary = switch capture.mode {
-        case .localMeeting:
-            "Microphone feasibility spike recorded to a local audio file."
-        case .call:
-            "Microphone and system audio feasibility spike recorded to local files."
-        case .auto:
-            "Recording finished."
-        }
+        capture.summary = capture.stopSummary
         activeCapture = nil
         return capture
     }
@@ -81,11 +82,30 @@ final class AudioCaptureCoordinator {
 struct ActiveCaptureSession {
     let sessionID: UUID
     let mode: CaptureMode
-    let microphoneRecorder: MicrophoneRecorder
+    let diagnosticKind: DiagnosticCaptureKind?
+    let microphoneRecorder: MicrophoneRecorder?
     let screenRecorder: ScreenCaptureRecorder?
-    let microphoneFileURL: URL
+    let microphoneFileURL: URL?
     let systemAudioFileURL: URL?
     var summary: String
+
+    var stopSummary: String {
+        switch diagnosticKind {
+        case .microphoneOnly:
+            return "Diagnostic microphone-only test recorded to a local audio file."
+        case .systemAudioOnly:
+            return "Diagnostic system-audio-only test recorded to a local audio file."
+        case nil:
+            switch mode {
+            case .localMeeting:
+                return "Microphone feasibility spike recorded to a local audio file."
+            case .call:
+                return "Microphone and system audio feasibility spike recorded to local files."
+            case .auto:
+                return "Recording finished."
+            }
+        }
+    }
 }
 
 final class MicrophoneRecorder {

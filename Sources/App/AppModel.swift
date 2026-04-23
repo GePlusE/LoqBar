@@ -148,6 +148,58 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func startDiagnosticRecording(_ diagnosticKind: DiagnosticCaptureKind) {
+        guard activeSession == nil else { return }
+
+        Task {
+            let refreshedPermissions = await permissionsService.ensurePermissions(for: diagnosticKind)
+
+            await MainActor.run {
+                permissionState = refreshedPermissions
+            }
+
+            let capturePlan = captureService.planDiagnosticCapture(
+                kind: diagnosticKind,
+                permissionState: refreshedPermissions
+            )
+
+            guard capturePlan.isAvailable else {
+                await MainActor.run {
+                    present(error: capturePlan.unavailableReason ?? .callAudioCaptureUnavailable)
+                }
+                return
+            }
+
+            var session = SessionRecord.newDraft(
+                captureMode: capturePlan.mode,
+                audioSourceType: capturePlan.audioSource
+            )
+            session.status = .recording
+            session.title = diagnosticKind.title
+            session.notes = "Starting diagnostic capture..."
+
+            await MainActor.run {
+                sessions.insert(session, at: 0)
+                persist()
+            }
+
+            do {
+                let activeCapture = try await recordingCoordinator.start(
+                    sessionID: session.id,
+                    mode: capturePlan.mode,
+                    diagnosticKind: diagnosticKind
+                )
+                await MainActor.run {
+                    apply(activeCapture, to: session.id, fallbackNote: capturePlan.userFacingSummary)
+                }
+            } catch {
+                await MainActor.run {
+                    markSessionFailed(session.id, error: .recordingStartupFailed(error.localizedDescription))
+                }
+            }
+        }
+    }
+
     func stopRecording() {
         guard let session = activeSession else { return }
 
@@ -225,7 +277,7 @@ final class AppModel: ObservableObject {
 
     private func apply(_ activeCapture: ActiveCaptureSession, to sessionID: UUID, fallbackNote: String) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        sessions[index].audioPath = activeCapture.microphoneFileURL.path
+        sessions[index].audioPath = activeCapture.microphoneFileURL?.path
         sessions[index].systemAudioPath = activeCapture.systemAudioFileURL?.path
         sessions[index].notes = activeCapture.summary.isEmpty ? fallbackNote : activeCapture.summary
         persist()
