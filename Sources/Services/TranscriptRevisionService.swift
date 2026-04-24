@@ -3,12 +3,14 @@ import Foundation
 struct EditableTranscriptSegment: Identifiable, Hashable {
     let key: String
     let timestamp: String
-    let speakerLabel: String
+    let originalSpeakerLabel: String
+    let assignedSpeakerLabel: String
     let originalText: String
     let currentText: String
 
     var id: String { key }
     var isEdited: Bool { currentText != originalText }
+    var isReassigned: Bool { assignedSpeakerLabel != originalSpeakerLabel }
 }
 
 private struct AgentSegmentMetadata {
@@ -24,20 +26,31 @@ struct TranscriptRevisionService {
 
         return parseTranscriptSection(from: markdown).map { parsed in
             let edit = session.transcriptEdits[parsed.key]
+            let assignedSpeakerLabel = session.speakerAssignments[parsed.key] ?? parsed.assignedSpeakerLabel
             return EditableTranscriptSegment(
                 key: parsed.key,
                 timestamp: parsed.timestamp,
-                speakerLabel: parsed.speakerLabel,
+                originalSpeakerLabel: parsed.originalSpeakerLabel,
+                assignedSpeakerLabel: assignedSpeakerLabel,
                 originalText: edit?.originalText ?? parsed.originalText,
                 currentText: edit?.editedText ?? parsed.currentText
             )
         }
     }
 
-    func applyEdits(to transcriptPath: String, edits: [String: TranscriptEdit]) throws {
+    func applyEdits(
+        to transcriptPath: String,
+        edits: [String: TranscriptEdit],
+        speakerAssignments: [String: String] = [:]
+    ) throws {
         let fileURL = URL(fileURLWithPath: transcriptPath)
         let markdown = try String(contentsOf: fileURL, encoding: .utf8)
-        let rebuilt = try rewriteTranscriptSection(in: markdown, edits: edits, aliasMapping: [:])
+        let rebuilt = try rewriteTranscriptSection(
+            in: markdown,
+            edits: edits,
+            speakerAssignments: speakerAssignments,
+            aliasMapping: [:]
+        )
         try rebuilt.write(to: fileURL, atomically: true, encoding: .utf8)
     }
 
@@ -48,6 +61,7 @@ struct TranscriptRevisionService {
         let rebuilt = try rewriteTranscriptSection(
             in: markdown,
             edits: session.transcriptEdits,
+            speakerAssignments: session.speakerAssignments,
             aliasMapping: session.aliasMapping
         )
         try rebuilt.write(to: fileURL, atomically: true, encoding: .utf8)
@@ -60,6 +74,7 @@ struct TranscriptRevisionService {
     private func rewriteTranscriptSection(
         in markdown: String,
         edits: [String: TranscriptEdit],
+        speakerAssignments: [String: String],
         aliasMapping: [String: String]
     ) throws -> String {
         let transcriptMarker = "# Transcript"
@@ -101,11 +116,18 @@ struct TranscriptRevisionService {
             let activeEdit = edits[segment.key]
             let currentText = activeEdit?.editedText ?? baseTranscriptText(for: segment)
             let originalText = activeEdit?.originalText ?? segment.originalText
-            let displaySpeaker = displaySpeakerName(for: segment.speakerLabel, aliasMapping: aliasMapping)
+            let assignedSpeakerLabel = speakerAssignments[segment.key] ?? segment.assignedSpeakerLabel
+            let displaySpeaker = displaySpeakerName(for: assignedSpeakerLabel, aliasMapping: aliasMapping)
             var lines = ["[\(segment.timestamp)] \(displaySpeaker): \(currentText)"]
 
-            if displaySpeaker != segment.speakerLabel {
-                lines.append("_Speaker label: \(segment.speakerLabel)_")
+            if displaySpeaker != assignedSpeakerLabel {
+                lines.append("_Speaker label: \(assignedSpeakerLabel)_")
+            } else if assignedSpeakerLabel != segment.originalSpeakerLabel {
+                lines.append("_Speaker label: \(assignedSpeakerLabel)_")
+            }
+
+            if assignedSpeakerLabel != segment.originalSpeakerLabel {
+                lines.append("_Original speaker label: \(segment.originalSpeakerLabel)_")
             }
 
             if currentText != originalText {
@@ -118,7 +140,8 @@ struct TranscriptRevisionService {
             let activeEdit = edits[segment.key]
             let currentText = activeEdit?.editedText ?? baseTranscriptText(for: segment)
             let originalText = activeEdit?.originalText ?? segment.originalText
-            let speakerDisplay = displaySpeakerName(for: segment.speakerLabel, aliasMapping: aliasMapping)
+            let assignedSpeakerLabel = speakerAssignments[segment.key] ?? segment.assignedSpeakerLabel
+            let speakerDisplay = displaySpeakerName(for: assignedSpeakerLabel, aliasMapping: aliasMapping)
             let metadata = agentMetadata[segment.key]
             let segmentID = metadata?.id ?? String(format: "seg-%04d", index + 1)
             let source = metadata?.source ?? "unknown"
@@ -126,8 +149,9 @@ struct TranscriptRevisionService {
             return """
             - id: "\(segmentID)"
               marker: "\(escapeForYAML(segment.timestamp))"
-              speaker_label: "\(escapeForYAML(segment.speakerLabel))"
+              speaker_label: "\(escapeForYAML(assignedSpeakerLabel))"
               speaker_name: "\(escapeForYAML(speakerDisplay))"
+              original_speaker_label: "\(escapeForYAML(segment.originalSpeakerLabel))"
               source: "\(escapeForYAML(source))"
               edited: \(currentText != originalText)
               text: "\(escapeForYAML(currentText))"
@@ -183,18 +207,28 @@ struct TranscriptRevisionService {
 
         let timestamp = String(firstLine[..<closingBracketIndex]).trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
         let speakerStart = firstLine.index(after: closingBracketIndex)
-        var speakerLabel = firstLine[speakerStart..<speakerSeparatorRange.lowerBound]
+        var assignedSpeakerLabel = firstLine[speakerStart..<speakerSeparatorRange.lowerBound]
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let currentText = firstLine[speakerSeparatorRange.upperBound...]
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         var originalText = currentText
+        var originalSpeakerLabel = assignedSpeakerLabel
 
         if let speakerLabelLine = lines.dropFirst().first(where: { $0.hasPrefix("_Speaker label: ") }) {
-            speakerLabel = speakerLabelLine
+            assignedSpeakerLabel = speakerLabelLine
                 .replacingOccurrences(of: "_Speaker label: ", with: "")
                 .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if let originalSpeakerLabelLine = lines.dropFirst().first(where: { $0.hasPrefix("_Original speaker label: ") }) {
+            originalSpeakerLabel = originalSpeakerLabelLine
+                .replacingOccurrences(of: "_Original speaker label: ", with: "")
+                .trimmingCharacters(in: CharacterSet(charactersIn: "_"))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            originalSpeakerLabel = assignedSpeakerLabel
         }
 
         if let correctionLine = lines.dropFirst().first(where: { $0.hasPrefix("_Manual correction from original transcript: ") }) {
@@ -204,11 +238,12 @@ struct TranscriptRevisionService {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        let key = segmentKey(timestamp: timestamp, speakerLabel: speakerLabel)
+        let key = segmentKey(timestamp: timestamp, speakerLabel: originalSpeakerLabel)
         return EditableTranscriptSegment(
             key: key,
             timestamp: timestamp,
-            speakerLabel: speakerLabel,
+            originalSpeakerLabel: originalSpeakerLabel,
+            assignedSpeakerLabel: assignedSpeakerLabel,
             originalText: originalText,
             currentText: currentText
         )
@@ -246,6 +281,8 @@ struct TranscriptRevisionService {
                 currentMarker = cleanedValue(from: line, prefix: "marker: ")
             } else if line.hasPrefix("speaker_label: ") {
                 currentSpeakerLabel = cleanedValue(from: line, prefix: "speaker_label: ")
+            } else if line.hasPrefix("original_speaker_label: ") {
+                currentSpeakerLabel = cleanedValue(from: line, prefix: "original_speaker_label: ")
             } else if line.hasPrefix("source: ") {
                 currentSource = cleanedValue(from: line, prefix: "source: ")
             }

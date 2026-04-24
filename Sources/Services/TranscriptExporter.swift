@@ -35,18 +35,26 @@ struct TranscriptExporter {
         let sourceSummary = content.analysis.primarySources.joined(separator: ", ")
         let analysisNotes = content.analysis.notes.map { "- \($0)" }.joined(separator: "\n")
         let manualCorrectionCount = session.transcriptEdits.count
+        let speakerReassignmentCount = session.speakerAssignments.count
         let transcriptBody = content.segments.enumerated().map { index, segment in
             let marker = segment.lowConfidence ? "[low confidence] " : ""
             let key = transcriptSegmentKey(for: segment)
             let activeEdit = session.transcriptEdits[key]
+            let assignedSpeakerLabel = session.speakerAssignments[key] ?? segment.speakerLabel
             let originalText = "\(marker)\(activeEdit?.originalText ?? segment.text)"
             let displayText = "\(marker)\(activeEdit?.editedText ?? segment.text)"
             let timestampMarker = "\(isoTimestamp(segment.absoluteTimestamp)) | +\(relativeTimestamp(segment.relativeOffset))"
-            let speakerDisplay = displaySpeakerName(for: segment.speakerLabel, aliases: session.aliasMapping)
+            let speakerDisplay = displaySpeakerName(for: assignedSpeakerLabel, aliases: session.aliasMapping)
             var lines = ["[\(timestampMarker)] \(speakerDisplay): \(displayText)"]
 
-            if speakerDisplay != segment.speakerLabel {
-                lines.append("_Speaker label: \(segment.speakerLabel)_")
+            if speakerDisplay != assignedSpeakerLabel {
+                lines.append("_Speaker label: \(assignedSpeakerLabel)_")
+            } else if assignedSpeakerLabel != segment.speakerLabel {
+                lines.append("_Speaker label: \(assignedSpeakerLabel)_")
+            }
+
+            if assignedSpeakerLabel != segment.speakerLabel {
+                lines.append("_Original speaker label: \(segment.speakerLabel)_")
             }
 
             if displayText != originalText {
@@ -59,17 +67,19 @@ struct TranscriptExporter {
             let marker = segment.lowConfidence ? "[low confidence] " : ""
             let key = transcriptSegmentKey(for: segment)
             let activeEdit = session.transcriptEdits[key]
+            let assignedSpeakerLabel = session.speakerAssignments[key] ?? segment.speakerLabel
             let originalText = "\(marker)\(activeEdit?.originalText ?? segment.text)"
             let displayText = "\(marker)\(activeEdit?.editedText ?? segment.text)"
             let timestampMarker = "\(isoTimestamp(segment.absoluteTimestamp)) | +\(relativeTimestamp(segment.relativeOffset))"
-            let speakerDisplay = displaySpeakerName(for: segment.speakerLabel, aliases: session.aliasMapping)
+            let speakerDisplay = displaySpeakerName(for: assignedSpeakerLabel, aliases: session.aliasMapping)
             let agentSegmentID = String(format: "seg-%04d", index + 1)
 
             return """
             - id: "\(agentSegmentID)"
               marker: "\(escapeForYAML(timestampMarker))"
-              speaker_label: "\(escapeForYAML(segment.speakerLabel))"
+              speaker_label: "\(escapeForYAML(assignedSpeakerLabel))"
               speaker_name: "\(escapeForYAML(speakerDisplay))"
+              original_speaker_label: "\(escapeForYAML(segment.speakerLabel))"
               source: "\(escapeForYAML(segment.source))"
               edited: \(displayText != originalText)
               text: "\(escapeForYAML(displayText))"
@@ -96,6 +106,7 @@ struct TranscriptExporter {
         \(speakerAliases.isEmpty ? "  {}" : speakerAliases)
         confidence_warnings: \(content.warningCount)
         manual_corrections: \(manualCorrectionCount)
+        speaker_reassignments: \(speakerReassignmentCount)
         audio_file: "\(session.audioPath ?? "")"
         system_audio_file: "\(session.systemAudioPath ?? "")"
         preferred_transcript_sources: "\(sourceSummary)"

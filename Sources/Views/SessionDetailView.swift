@@ -118,7 +118,7 @@ struct SessionDetailView: View {
                 ForEach(preview) { segment in
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline) {
-                            Text(displaySpeakerName(for: segment.speakerLabel, session: session))
+                            Text(displaySpeakerName(for: segment.assignedSpeakerLabel, session: session))
                                 .font(.headline)
 
                             if segment.isEdited {
@@ -131,14 +131,49 @@ struct SessionDetailView: View {
                                     .clipShape(Capsule())
                             }
 
+                            if segment.isReassigned {
+                                Text("Reassigned")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.blue.opacity(0.16))
+                                    .foregroundStyle(.blue)
+                                    .clipShape(Capsule())
+                            }
+
                             Spacer()
                             Text(segment.timestamp)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
 
-                        if displaySpeakerName(for: segment.speakerLabel, session: session) != segment.speakerLabel {
-                            Text(segment.speakerLabel)
+                        HStack(spacing: 10) {
+                            if displaySpeakerName(for: segment.assignedSpeakerLabel, session: session) != segment.assignedSpeakerLabel {
+                                Text(segment.assignedSpeakerLabel)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Menu {
+                                ForEach(speakerAssignmentOptions(for: session, segment: segment), id: \.self) { speakerLabel in
+                                    Button(displaySpeakerName(for: speakerLabel, session: session)) {
+                                        appModel.updateSpeakerAssignment(
+                                            for: session.id,
+                                            segmentKey: segment.key,
+                                            speakerLabel: speakerLabel,
+                                            originalSpeakerLabel: segment.originalSpeakerLabel
+                                        )
+                                    }
+                                }
+                            } label: {
+                                Label("Speaker", systemImage: "person.crop.circle.badge.checkmark")
+                                    .font(.caption)
+                            }
+                            .menuStyle(.borderlessButton)
+                        }
+
+                        if segment.isReassigned {
+                            Text("Original: \(displaySpeakerName(for: segment.originalSpeakerLabel, session: session))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -272,6 +307,18 @@ struct SessionDetailView: View {
             .map(TranscriptPreviewSegment.init(editableSegment:))
     }
 
+    private func speakerAssignmentOptions(for session: SessionRecord, segment: TranscriptPreviewSegment) -> [String] {
+        let known = Set(session.speakerLabels + [segment.originalSpeakerLabel, segment.assignedSpeakerLabel])
+        return known.sorted {
+            numericSpeakerIndex(for: $0) < numericSpeakerIndex(for: $1)
+        }
+    }
+
+    private func numericSpeakerIndex(for label: String) -> Int {
+        guard label.hasPrefix("Speaker") else { return .max }
+        return Int(label.replacingOccurrences(of: "Speaker", with: "")) ?? .max
+    }
+
     private func statusColor(for session: SessionRecord) -> Color {
         if session.isTranscriptionPending {
             return .orange
@@ -296,18 +343,22 @@ private struct TranscriptPreviewSegment: Identifiable {
     let id: String
     let key: String
     let timestamp: String
-    let speakerLabel: String
+    let originalSpeakerLabel: String
+    let assignedSpeakerLabel: String
     let originalText: String
     let currentText: String
     let isEdited: Bool
+    let isReassigned: Bool
 
     init(editableSegment: EditableTranscriptSegment) {
         id = editableSegment.id
         key = editableSegment.key
         timestamp = editableSegment.timestamp
-        speakerLabel = editableSegment.speakerLabel
+        originalSpeakerLabel = editableSegment.originalSpeakerLabel
+        assignedSpeakerLabel = editableSegment.assignedSpeakerLabel
         originalText = editableSegment.originalText
         currentText = editableSegment.currentText
         isEdited = editableSegment.isEdited
+        isReassigned = editableSegment.isReassigned
     }
 }

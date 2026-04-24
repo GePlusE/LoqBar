@@ -17,6 +17,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
     var transcriptionLanguageOverride: String?
     var speakerCount: Int
     var aliasMapping: [String: String]
+    var speakerAssignments: [String: String]
     var transcriptEdits: [String: TranscriptEdit]
     var warningCount: Int
     var notes: String
@@ -38,6 +39,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         case transcriptionLanguageOverride
         case speakerCount
         case aliasMapping
+        case speakerAssignments
         case transcriptEdits
         case warningCount
         case notes
@@ -77,7 +79,12 @@ struct SessionRecord: Identifiable, Codable, Hashable {
             return Int(key.replacingOccurrences(of: "Speaker", with: ""))
         }
 
-        let totalSpeakers = max(speakerCount, aliasIndexes.max() ?? 0)
+        let reassignedIndexes = speakerAssignments.values.compactMap { key -> Int? in
+            guard key.hasPrefix("Speaker") else { return nil }
+            return Int(key.replacingOccurrences(of: "Speaker", with: ""))
+        }
+
+        let totalSpeakers = max(speakerCount, aliasIndexes.max() ?? 0, reassignedIndexes.max() ?? 0)
         guard totalSpeakers > 0 else { return [] }
 
         return (1...totalSpeakers).map { "Speaker\($0)" }
@@ -100,6 +107,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         transcriptionLanguageOverride: String?,
         speakerCount: Int,
         aliasMapping: [String: String],
+        speakerAssignments: [String: String],
         transcriptEdits: [String: TranscriptEdit],
         warningCount: Int,
         notes: String
@@ -120,6 +128,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         self.transcriptionLanguageOverride = transcriptionLanguageOverride
         self.speakerCount = speakerCount
         self.aliasMapping = aliasMapping
+        self.speakerAssignments = speakerAssignments
         self.transcriptEdits = transcriptEdits
         self.warningCount = warningCount
         self.notes = notes
@@ -144,6 +153,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
             transcriptionLanguageOverride: nil,
             speakerCount: 0,
             aliasMapping: [:],
+            speakerAssignments: [:],
             transcriptEdits: [:],
             warningCount: 0,
             notes: ""
@@ -168,6 +178,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         transcriptionLanguageOverride = try container.decodeIfPresent(String.self, forKey: .transcriptionLanguageOverride)
         speakerCount = try container.decode(Int.self, forKey: .speakerCount)
         aliasMapping = try container.decodeIfPresent([String: String].self, forKey: .aliasMapping) ?? [:]
+        speakerAssignments = try container.decodeIfPresent([String: String].self, forKey: .speakerAssignments) ?? [:]
         transcriptEdits = try container.decodeIfPresent([String: TranscriptEdit].self, forKey: .transcriptEdits) ?? [:]
         warningCount = try container.decode(Int.self, forKey: .warningCount)
         notes = try container.decode(String.self, forKey: .notes)
