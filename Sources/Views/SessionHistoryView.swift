@@ -58,24 +58,27 @@ private struct SessionRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(session.title)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.primary)
+            HStack(alignment: .top, spacing: 16) {
+                Text(session.title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 10) {
+                VStack(alignment: .trailing, spacing: 4) {
+                    sessionMetaLabel("Started", value: startedAtText)
+                    sessionMetaLabel("Duration", value: durationText)
+                }
+            }
+
+            HStack(alignment: .center, spacing: 10) {
                 statusBadge
                 Text(session.captureMode.title)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            }
 
-            HStack(spacing: 18) {
-                sessionMetaLabel("Started", value: startedAtText)
-                sessionMetaLabel("Duration", value: durationText)
-            }
-
-            if !participantAliases.isEmpty {
-                participantAliasRow
+                if !participantAliases.isEmpty {
+                    participantAliasRow
+                }
             }
 
             if !session.notes.isEmpty {
@@ -103,7 +106,7 @@ private struct SessionRow: View {
     }
 
     private func sessionMetaLabel(_ title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .trailing, spacing: 2) {
             Text(title.uppercased())
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.tertiary)
@@ -127,6 +130,7 @@ private struct SessionRow: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var participantAliases: [String] {
