@@ -6,15 +6,14 @@ struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             header
             modePicker
             sessionStatus
             controls
-            diagnostics
             quickActions
         }
-        .padding(16)
+        .padding(18)
         .frame(width: 360)
         .alert(item: $appModel.alertContext) { context in
             Alert(
@@ -31,12 +30,23 @@ struct MenuBarView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("LoqBar")
-                .font(.title2.weight(.semibold))
-            Text("Capture meetings locally. Export structured transcripts.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("LoqBar")
+                    .font(.title2.weight(.semibold))
+                Text("Capture meetings locally.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Text(statusTitle)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.secondary.opacity(0.12))
+                .clipShape(Capsule())
         }
     }
 
@@ -59,7 +69,7 @@ struct MenuBarView: View {
 
     private var sessionStatus: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(statusTitle, systemImage: appModel.menuBarIconName)
+            Label("Session", systemImage: appModel.menuBarIconName)
                 .font(.headline)
 
             Text(statusSubtitle)
@@ -104,60 +114,62 @@ struct MenuBarView: View {
         }
     }
 
-    private var diagnostics: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Diagnostics")
-                .font(.headline)
-
-            Button("Start Microphone Only Test") {
-                appModel.startDiagnosticRecording(.microphoneOnly)
-            }
-            .disabled(appModel.activeSession != nil)
-
-            Button("Start System Audio Only Test") {
-                appModel.startDiagnosticRecording(.systemAudioOnly)
-            }
-            .disabled(appModel.activeSession != nil)
-        }
-        .buttonStyle(.plain)
-    }
-
     private var quickActions: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button("Open Settings") {
+        VStack(alignment: .leading, spacing: 10) {
+            Button("Preferences") {
                 appModel.prepareToPresentAuxiliaryWindow()
                 openWindow(id: "settings")
                 appModel.bringAuxiliaryWindowToFront(titleContains: "Settings")
             }
 
-            Button("Open Recent Sessions") {
+            Button("Sessions") {
                 appModel.prepareToPresentAuxiliaryWindow()
                 openWindow(id: "history")
                 appModel.bringAuxiliaryWindowToFront(titleContains: "Recent Sessions")
             }
 
-            Button("Open Transcript Folder") {
+            Button("Transcripts") {
                 appModel.openTranscriptFolder()
             }
 
-            Button("Open Recording Root Folder") {
+            Button("Recordings") {
                 appModel.openRecordingRootFolder()
             }
 
-            Button("Open Latest Recording Folder") {
-                appModel.openLatestRecordingFolder()
-            }
-            .disabled(appModel.latestSession == nil)
+            Menu("More") {
+                Button("Refresh Permissions") {
+                    appModel.refreshPermissions()
+                }
 
-            Button("Reveal Latest Microphone File") {
-                appModel.revealLatestMicrophoneRecording()
-            }
-            .disabled(appModel.latestSession?.audioPath == nil)
+                Divider()
 
-            Button("Reveal Latest System Audio File") {
-                appModel.revealLatestSystemAudioRecording()
+                Button("Latest Recording Folder") {
+                    appModel.openLatestRecordingFolder()
+                }
+                .disabled(appModel.latestSession == nil)
+
+                Button("Reveal Latest Mic File") {
+                    appModel.revealLatestMicrophoneRecording()
+                }
+                .disabled(appModel.latestSession?.audioPath == nil)
+
+                Button("Reveal Latest System File") {
+                    appModel.revealLatestSystemAudioRecording()
+                }
+                .disabled(appModel.latestSession?.systemAudioPath == nil)
+
+                Divider()
+
+                Button("Mic Only Test") {
+                    appModel.startDiagnosticRecording(.microphoneOnly)
+                }
+                .disabled(appModel.activeSession != nil)
+
+                Button("System Audio Test") {
+                    appModel.startDiagnosticRecording(.systemAudioOnly)
+                }
+                .disabled(appModel.activeSession != nil)
             }
-            .disabled(appModel.latestSession?.systemAudioPath == nil)
 
             if appModel.firstRunState.needsOnboarding {
                 Divider()
@@ -166,7 +178,7 @@ struct MenuBarView: View {
                     FirstRunSetupView()
                         .environmentObject(appModel)
                 } label: {
-                    Text("Finish First-Run Setup")
+                    Text("Finish Setup")
                 }
             }
 
