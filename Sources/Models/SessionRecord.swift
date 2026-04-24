@@ -47,6 +47,18 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         return "No transcript available yet."
     }
 
+    var speakerLabels: [String] {
+        let aliasIndexes = aliasMapping.keys.compactMap { key -> Int? in
+            guard key.hasPrefix("Speaker") else { return nil }
+            return Int(key.replacingOccurrences(of: "Speaker", with: ""))
+        }
+
+        let totalSpeakers = max(speakerCount, aliasIndexes.max() ?? 0)
+        guard totalSpeakers > 0 else { return [] }
+
+        return (1...totalSpeakers).map { "Speaker\($0)" }
+    }
+
     static func newDraft(captureMode: CaptureMode, audioSourceType: AudioSourceType) -> SessionRecord {
         let now = Date()
         return SessionRecord(
