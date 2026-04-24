@@ -105,6 +105,17 @@ struct SessionDetailView: View {
                         HStack(alignment: .firstTextBaseline) {
                             Text(displaySpeakerName(for: segment.speakerLabel, session: session))
                                 .font(.headline)
+
+                            if segment.isEdited {
+                                Text("Edited")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.orange.opacity(0.16))
+                                    .foregroundStyle(.orange)
+                                    .clipShape(Capsule())
+                            }
+
                             Spacer()
                             Text(segment.timestamp)
                                 .font(.caption)
@@ -141,6 +152,20 @@ struct SessionDetailView: View {
                                     segmentDraftText = ""
                                 }
                                 .buttonStyle(.bordered)
+
+                                if segment.isEdited {
+                                    Button("Reset to Original") {
+                                        appModel.updateTranscriptSegment(
+                                            for: session.id,
+                                            segmentKey: segment.key,
+                                            originalText: segment.originalText,
+                                            editedText: segment.originalText
+                                        )
+                                        editingSegmentKey = nil
+                                        segmentDraftText = ""
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
                             }
                         } else {
                             Button {
@@ -158,6 +183,17 @@ struct SessionDetailView: View {
                                 Text(segment.originalText)
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
+
+                                Button("Reset to Original") {
+                                    appModel.updateTranscriptSegment(
+                                        for: session.id,
+                                        segmentKey: segment.key,
+                                        originalText: segment.originalText,
+                                        editedText: segment.originalText
+                                    )
+                                }
+                                .buttonStyle(.borderless)
+                                .font(.footnote)
                             }
                         }
                     }

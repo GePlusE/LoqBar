@@ -276,7 +276,14 @@ final class AppModel: ObservableObject {
     func updateAlias(for session: SessionRecord, speakerLabel: String, alias: String) {
         guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
         sessions[index].aliasMapping[speakerLabel] = alias.trimmingCharacters(in: .whitespacesAndNewlines)
-        persist()
+        do {
+            try transcriptRevisionService.refreshTranscriptPresentation(for: sessions[index])
+            persist()
+        } catch let error as AppError {
+            present(error: error)
+        } catch {
+            present(error: .transcriptExportFailed("LoqBar could not refresh the transcript after updating speaker aliases: \(error.localizedDescription)"))
+        }
     }
 
     func editableTranscriptSegments(for session: SessionRecord) -> [EditableTranscriptSegment] {
