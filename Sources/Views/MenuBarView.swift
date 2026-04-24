@@ -8,9 +8,9 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
+            controls
             modePicker
             sessionStatus
-            controls
             quickActions
         }
         .padding(18)
@@ -31,13 +31,8 @@ struct MenuBarView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("LoqBar")
-                    .font(.title2.weight(.semibold))
-                Text("Capture meetings locally.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            Text("LoqBar")
+                .font(.title2.weight(.semibold))
 
             Spacer()
 
@@ -52,10 +47,10 @@ struct MenuBarView: View {
 
     private var modePicker: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Capture Mode")
+            Text("Mode")
                 .font(.headline)
 
-            Picker("Capture Mode", selection: $appModel.settings.defaultCaptureMode) {
+            Picker("Mode", selection: $appModel.settings.defaultCaptureMode) {
                 ForEach(CaptureMode.allCases) { mode in
                     Text(mode.title).tag(mode)
                 }
@@ -98,7 +93,7 @@ struct MenuBarView: View {
 
     private var controls: some View {
         HStack(spacing: 10) {
-            Button(appModel.activeSession == nil ? "Start Recording" : "Stop Recording") {
+            Button(appModel.activeSession == nil ? "Start" : "Stop") {
                 if appModel.activeSession == nil {
                     appModel.startRecording()
                 } else {
@@ -128,17 +123,19 @@ struct MenuBarView: View {
                 appModel.bringAuxiliaryWindowToFront(titleContains: "Recent Sessions")
             }
 
-            Button("Transcripts") {
-                appModel.openTranscriptFolder()
-            }
-
-            Button("Recordings") {
-                appModel.openRecordingRootFolder()
-            }
-
             Menu("More") {
                 Button("Refresh Permissions") {
                     appModel.refreshPermissions()
+                }
+
+                Divider()
+
+                Button("Transcripts") {
+                    appModel.openTranscriptFolder()
+                }
+
+                Button("Recordings") {
+                    appModel.openRecordingRootFolder()
                 }
 
                 Divider()
