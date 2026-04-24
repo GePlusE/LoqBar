@@ -64,7 +64,7 @@ private struct SessionRow: View {
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                VStack(alignment: .trailing, spacing: 4) {
+                HStack(alignment: .top, spacing: 18) {
                     sessionMetaLabel("Started", value: startedAtText)
                     sessionMetaLabel("Duration", value: durationText)
                 }
