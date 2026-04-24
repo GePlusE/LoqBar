@@ -247,6 +247,12 @@ final class AppModel: ObservableObject {
         persist()
     }
 
+    func updateSessionTranscriptionLanguage(_ sessionID: UUID, language: String) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[index].transcriptionLanguageOverride = language == TranscriptionLanguageOption.auto.rawValue ? nil : language
+        persist()
+    }
+
     func retryTranscription(for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         guard !sessions[index].isActive else { return }

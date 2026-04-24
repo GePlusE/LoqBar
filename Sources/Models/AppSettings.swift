@@ -1,5 +1,42 @@
 import Foundation
 
+enum TranscriptionLanguageOption: String, Codable, CaseIterable, Identifiable {
+    case auto
+    case english = "en"
+    case german = "de"
+    case french = "fr"
+    case spanish = "es"
+    case italian = "it"
+    case dutch = "nl"
+    case portuguese = "pt"
+    case polish = "pl"
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .auto:
+            return "Auto Detect"
+        case .english:
+            return "English"
+        case .german:
+            return "German"
+        case .french:
+            return "French"
+        case .spanish:
+            return "Spanish"
+        case .italian:
+            return "Italian"
+        case .dutch:
+            return "Dutch"
+        case .portuguese:
+            return "Portuguese"
+        case .polish:
+            return "Polish"
+        }
+    }
+}
+
 struct AppSettings: Codable {
     var storageRootFolder: String
     var audioRetentionPolicy: AudioRetentionPolicy

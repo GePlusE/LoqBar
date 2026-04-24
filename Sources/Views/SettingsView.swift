@@ -1,43 +1,6 @@
 import SwiftUI
 import AppKit
 
-private enum SettingsLanguage: String, CaseIterable, Identifiable {
-    case auto
-    case english = "en"
-    case german = "de"
-    case french = "fr"
-    case spanish = "es"
-    case italian = "it"
-    case dutch = "nl"
-    case portuguese = "pt"
-    case polish = "pl"
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .auto:
-            return "Auto Detect"
-        case .english:
-            return "English"
-        case .german:
-            return "German"
-        case .french:
-            return "French"
-        case .spanish:
-            return "Spanish"
-        case .italian:
-            return "Italian"
-        case .dutch:
-            return "Dutch"
-        case .portuguese:
-            return "Portuguese"
-        case .polish:
-            return "Polish"
-        }
-    }
-}
-
 private enum SettingsPane: String, CaseIterable, Identifiable {
     case general
     case storage
@@ -227,10 +190,10 @@ struct SettingsView: View {
 
             settingsField("Language") {
                 Picker("Language", selection: Binding(
-                    get: { SettingsLanguage(rawValue: appModel.settings.transcriptionLanguage) ?? .auto },
+                    get: { TranscriptionLanguageOption(rawValue: appModel.settings.transcriptionLanguage) ?? .auto },
                     set: { appModel.settings.transcriptionLanguage = $0.rawValue }
                 )) {
-                    ForEach(SettingsLanguage.allCases) { language in
+                    ForEach(TranscriptionLanguageOption.allCases) { language in
                         Text(language.title).tag(language)
                     }
                 }

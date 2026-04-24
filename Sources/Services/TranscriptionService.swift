@@ -73,7 +73,10 @@ struct TranscriptionService {
 
     func transcribe(plan: TranscriptionPlan, session: SessionRecord, settings: AppSettings) throws -> TranscriptContent {
         let start = session.startedAt
-        guard let whisperConfiguration = WhisperConfiguration.from(settings: settings) else {
+        guard let whisperConfiguration = WhisperConfiguration.from(
+            settings: settings,
+            languageOverride: session.transcriptionLanguageOverride
+        ) else {
             let setupMessage: String
 
             if settings.hasExternalTranscriptionPaths {

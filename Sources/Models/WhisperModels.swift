@@ -6,7 +6,7 @@ struct WhisperConfiguration {
     let language: String?
     let source: WhisperConfigurationSource
 
-    static func from(settings: AppSettings) -> WhisperConfiguration? {
+    static func from(settings: AppSettings, languageOverride: String? = nil) -> WhisperConfiguration? {
         let fileManager = FileManager.default
 
         let managedExecutablePath = settings.managedTranscriptionExecutablePath
@@ -31,7 +31,8 @@ struct WhisperConfiguration {
             return nil
         }
 
-        let languageValue = settings.transcriptionLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
+        let languageValue = (languageOverride ?? settings.transcriptionLanguage)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         return WhisperConfiguration(
             executableURL: URL(fileURLWithPath: executablePath),
             modelURL: URL(fileURLWithPath: modelPath),

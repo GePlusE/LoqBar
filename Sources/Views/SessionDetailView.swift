@@ -67,6 +67,21 @@ struct SessionDetailView: View {
                 }
 
                 detailRow("Transcription", value: session.transcriptionStatusSummary)
+                detailRow("Retry language") {
+                    Picker(
+                        "Retry language",
+                        selection: Binding(
+                            get: { TranscriptionLanguageOption(rawValue: session.transcriptionLanguageOverride ?? "auto") ?? .auto },
+                            set: { appModel.updateSessionTranscriptionLanguage(session.id, language: $0.rawValue) }
+                        )
+                    ) {
+                        ForEach(TranscriptionLanguageOption.allCases) { language in
+                            Text(language.title).tag(language)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220, alignment: .trailing)
+                }
                 detailRow("Capture mode", value: session.captureMode.title)
                 detailRow("Audio source", value: session.audioSourceType.title)
                 detailRow("Microphone audio", value: session.audioPath ?? "Not available")

@@ -14,6 +14,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
     var audioPath: String?
     var systemAudioPath: String?
     var language: String
+    var transcriptionLanguageOverride: String?
     var speakerCount: Int
     var aliasMapping: [String: String]
     var transcriptEdits: [String: TranscriptEdit]
@@ -34,6 +35,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         case audioPath
         case systemAudioPath
         case language
+        case transcriptionLanguageOverride
         case speakerCount
         case aliasMapping
         case transcriptEdits
@@ -95,6 +97,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         audioPath: String?,
         systemAudioPath: String?,
         language: String,
+        transcriptionLanguageOverride: String?,
         speakerCount: Int,
         aliasMapping: [String: String],
         transcriptEdits: [String: TranscriptEdit],
@@ -114,6 +117,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         self.audioPath = audioPath
         self.systemAudioPath = systemAudioPath
         self.language = language
+        self.transcriptionLanguageOverride = transcriptionLanguageOverride
         self.speakerCount = speakerCount
         self.aliasMapping = aliasMapping
         self.transcriptEdits = transcriptEdits
@@ -137,6 +141,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
             audioPath: nil,
             systemAudioPath: nil,
             language: Locale.current.language.languageCode?.identifier ?? "en",
+            transcriptionLanguageOverride: nil,
             speakerCount: 0,
             aliasMapping: [:],
             transcriptEdits: [:],
@@ -160,6 +165,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         audioPath = try container.decodeIfPresent(String.self, forKey: .audioPath)
         systemAudioPath = try container.decodeIfPresent(String.self, forKey: .systemAudioPath)
         language = try container.decode(String.self, forKey: .language)
+        transcriptionLanguageOverride = try container.decodeIfPresent(String.self, forKey: .transcriptionLanguageOverride)
         speakerCount = try container.decode(Int.self, forKey: .speakerCount)
         aliasMapping = try container.decodeIfPresent([String: String].self, forKey: .aliasMapping) ?? [:]
         transcriptEdits = try container.decodeIfPresent([String: TranscriptEdit].self, forKey: .transcriptEdits) ?? [:]
