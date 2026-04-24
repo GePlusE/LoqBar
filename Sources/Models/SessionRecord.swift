@@ -20,6 +20,27 @@ struct SessionRecord: Identifiable, Codable, Hashable {
     var warningCount: Int
     var notes: String
 
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case createdAt
+        case startedAt
+        case endedAt
+        case durationSeconds
+        case status
+        case captureMode
+        case audioSourceType
+        case transcriptPath
+        case audioPath
+        case systemAudioPath
+        case language
+        case speakerCount
+        case aliasMapping
+        case transcriptEdits
+        case warningCount
+        case notes
+    }
+
     var isActive: Bool {
         status == .recording || status == .processing
     }
@@ -60,6 +81,46 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         return (1...totalSpeakers).map { "Speaker\($0)" }
     }
 
+    init(
+        id: UUID,
+        title: String,
+        createdAt: Date,
+        startedAt: Date,
+        endedAt: Date?,
+        durationSeconds: Int,
+        status: SessionStatus,
+        captureMode: CaptureMode,
+        audioSourceType: AudioSourceType,
+        transcriptPath: String?,
+        audioPath: String?,
+        systemAudioPath: String?,
+        language: String,
+        speakerCount: Int,
+        aliasMapping: [String: String],
+        transcriptEdits: [String: TranscriptEdit],
+        warningCount: Int,
+        notes: String
+    ) {
+        self.id = id
+        self.title = title
+        self.createdAt = createdAt
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.durationSeconds = durationSeconds
+        self.status = status
+        self.captureMode = captureMode
+        self.audioSourceType = audioSourceType
+        self.transcriptPath = transcriptPath
+        self.audioPath = audioPath
+        self.systemAudioPath = systemAudioPath
+        self.language = language
+        self.speakerCount = speakerCount
+        self.aliasMapping = aliasMapping
+        self.transcriptEdits = transcriptEdits
+        self.warningCount = warningCount
+        self.notes = notes
+    }
+
     static func newDraft(captureMode: CaptureMode, audioSourceType: AudioSourceType) -> SessionRecord {
         let now = Date()
         return SessionRecord(
@@ -82,6 +143,28 @@ struct SessionRecord: Identifiable, Codable, Hashable {
             warningCount: 0,
             notes: ""
         )
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        startedAt = try container.decode(Date.self, forKey: .startedAt)
+        endedAt = try container.decodeIfPresent(Date.self, forKey: .endedAt)
+        durationSeconds = try container.decode(Int.self, forKey: .durationSeconds)
+        status = try container.decode(SessionStatus.self, forKey: .status)
+        captureMode = try container.decode(CaptureMode.self, forKey: .captureMode)
+        audioSourceType = try container.decode(AudioSourceType.self, forKey: .audioSourceType)
+        transcriptPath = try container.decodeIfPresent(String.self, forKey: .transcriptPath)
+        audioPath = try container.decodeIfPresent(String.self, forKey: .audioPath)
+        systemAudioPath = try container.decodeIfPresent(String.self, forKey: .systemAudioPath)
+        language = try container.decode(String.self, forKey: .language)
+        speakerCount = try container.decode(Int.self, forKey: .speakerCount)
+        aliasMapping = try container.decodeIfPresent([String: String].self, forKey: .aliasMapping) ?? [:]
+        transcriptEdits = try container.decodeIfPresent([String: TranscriptEdit].self, forKey: .transcriptEdits) ?? [:]
+        warningCount = try container.decode(Int.self, forKey: .warningCount)
+        notes = try container.decode(String.self, forKey: .notes)
     }
 }
 
