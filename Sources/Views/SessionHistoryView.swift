@@ -499,9 +499,9 @@ private struct SwipeToDeleteSessionCard<Content: View>: View {
 
             content
                 .offset(x: liveOffsetX)
-                .contentShape(Rectangle())
-                .gesture(dragGesture)
         }
+        .contentShape(Rectangle())
+        .highPriorityGesture(dragGesture)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .animation(.spring(response: 0.22, dampingFraction: 0.9), value: offsetX)
     }
