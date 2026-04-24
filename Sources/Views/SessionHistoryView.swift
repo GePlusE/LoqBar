@@ -46,6 +46,10 @@ struct SessionHistoryView: View {
     @State private var searchText = ""
     @State private var selectedModeFilter: SessionHistoryModeFilter = .all
     @State private var selectedStatusFilter: SessionHistoryStatusFilter = .all
+    @State private var useStartDateFilter = false
+    @State private var useEndDateFilter = false
+    @State private var startDateFilter = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+    @State private var endDateFilter = Date()
 
     var body: some View {
         NavigationStack {
@@ -90,6 +94,7 @@ struct SessionHistoryView: View {
         appModel.sessions.filter { session in
             matchesModeFilter(session) &&
             matchesStatusFilter(session) &&
+            matchesDateFilter(session) &&
             matchesSearch(session)
         }
     }
@@ -122,6 +127,36 @@ struct SessionHistoryView: View {
                 }
                 .labelsHidden()
                 .frame(maxWidth: 220, alignment: .leading)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    Toggle("From", isOn: $useStartDateFilter)
+                        .toggleStyle(.checkbox)
+                        .frame(width: 70, alignment: .leading)
+
+                    DatePicker(
+                        "From date",
+                        selection: $startDateFilter,
+                        displayedComponents: [.date]
+                    )
+                    .labelsHidden()
+                    .disabled(!useStartDateFilter)
+                }
+
+                HStack(spacing: 12) {
+                    Toggle("To", isOn: $useEndDateFilter)
+                        .toggleStyle(.checkbox)
+                        .frame(width: 70, alignment: .leading)
+
+                    DatePicker(
+                        "To date",
+                        selection: $endDateFilter,
+                        displayedComponents: [.date]
+                    )
+                    .labelsHidden()
+                    .disabled(!useEndDateFilter)
+                }
             }
         }
         .padding(24)
@@ -166,6 +201,24 @@ struct SessionHistoryView: View {
         case .failed:
             return session.status == .failed
         }
+    }
+
+    private func matchesDateFilter(_ session: SessionRecord) -> Bool {
+        let sessionDate = session.startedAt
+
+        if useStartDateFilter {
+            let startOfDay = Calendar.current.startOfDay(for: startDateFilter)
+            guard sessionDate >= startOfDay else { return false }
+        }
+
+        if useEndDateFilter {
+            guard let endOfDay = Calendar.current.date(byAdding: DateComponents(day: 1, second: -1), to: Calendar.current.startOfDay(for: endDateFilter)) else {
+                return false
+            }
+            guard sessionDate <= endOfDay else { return false }
+        }
+
+        return true
     }
 
     private func matchesSearch(_ session: SessionRecord) -> Bool {
