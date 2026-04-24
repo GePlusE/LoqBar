@@ -64,9 +64,18 @@ private struct SessionRow: View {
 
             HStack(spacing: 10) {
                 statusBadge
-                Text("\(session.captureMode.title) • \(session.durationSeconds)s")
+                Text(session.captureMode.title)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 18) {
+                sessionMetaLabel("Started", value: startedAtText)
+                sessionMetaLabel("Duration", value: durationText)
+            }
+
+            if !participantAliases.isEmpty {
+                participantAliasRow
             }
 
             if !session.notes.isEmpty {
@@ -91,6 +100,64 @@ private struct SessionRow: View {
             .background(statusColor.opacity(0.16))
             .foregroundStyle(statusColor)
             .clipShape(Capsule())
+    }
+
+    private func sessionMetaLabel(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+            Text(value)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var participantAliasRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(participantAliases, id: \.self) { alias in
+                    Text(alias)
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.secondary.opacity(0.12))
+                        .foregroundStyle(.primary)
+                        .clipShape(Capsule())
+                }
+            }
+        }
+    }
+
+    private var participantAliases: [String] {
+        session.aliasMapping.values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .sorted()
+    }
+
+    private var startedAtText: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: session.startedAt)
+    }
+
+    private var durationText: String {
+        let totalSeconds = max(session.durationSeconds, 0)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let seconds = totalSeconds % 60
+
+        if hours > 0 {
+            return String(format: "%dh %02dm %02ds", hours, minutes, seconds)
+        }
+
+        if minutes > 0 {
+            return String(format: "%dm %02ds", minutes, seconds)
+        }
+
+        return "\(seconds)s"
     }
 
     private var statusColor: Color {
