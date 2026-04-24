@@ -252,6 +252,26 @@ final class AppModel: ObservableObject {
         persist()
     }
 
+    func deleteSession(_ sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        let session = sessions[index]
+
+        guard !session.isActive else {
+            present(error: .sessionDeletionFailed("Stop the active recording before deleting this session."))
+            return
+        }
+
+        do {
+            try sessionStore.deleteArtifacts(for: session)
+            sessions.remove(at: index)
+            persist()
+        } catch let error as AppError {
+            present(error: error)
+        } catch {
+            present(error: .sessionDeletionFailed("LoqBar could not delete this session: \(error.localizedDescription)"))
+        }
+    }
+
     func updateSessionTranscriptionLanguage(_ sessionID: UUID, language: String) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].transcriptionLanguageOverride = language == TranscriptionLanguageOption.auto.rawValue ? nil : language

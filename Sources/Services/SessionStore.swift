@@ -45,6 +45,37 @@ struct SessionStore {
         }
     }
 
+    func deleteArtifacts(for session: SessionRecord) throws {
+        let fileManager = FileManager.default
+        var candidateFolderURLs: Set<URL> = []
+
+        for path in [session.transcriptPath, session.audioPath, session.systemAudioPath].compactMap({ $0 }) {
+            let fileURL = URL(fileURLWithPath: path)
+            candidateFolderURLs.insert(fileURL.deletingLastPathComponent())
+
+            if fileManager.fileExists(atPath: fileURL.path) {
+                do {
+                    try fileManager.removeItem(at: fileURL)
+                } catch {
+                    throw AppError.sessionDeletionFailed("LoqBar could not remove \(fileURL.lastPathComponent): \(error.localizedDescription)")
+                }
+            }
+        }
+
+        for folderURL in candidateFolderURLs {
+            guard fileManager.fileExists(atPath: folderURL.path) else { continue }
+
+            do {
+                let remainingItems = try fileManager.contentsOfDirectory(atPath: folderURL.path)
+                if remainingItems.isEmpty {
+                    try fileManager.removeItem(at: folderURL)
+                }
+            } catch {
+                throw AppError.sessionDeletionFailed("LoqBar could not clean up the session folder: \(error.localizedDescription)")
+            }
+        }
+    }
+
     private func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
         do {
             let data = try Data(contentsOf: url)

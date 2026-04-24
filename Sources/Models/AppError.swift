@@ -11,6 +11,7 @@ enum AppError: Error {
     case loginItemUpdateFailed(String)
     case transcriptExportFailed(String)
     case storageSetupFailed(String)
+    case sessionDeletionFailed(String)
 
     var title: String {
         switch self {
@@ -34,6 +35,8 @@ enum AppError: Error {
             return "Transcript Export Failed"
         case .storageSetupFailed:
             return "Storage Setup Failed"
+        case .sessionDeletionFailed:
+            return "Session Could Not Be Deleted"
         }
     }
 
@@ -58,6 +61,8 @@ enum AppError: Error {
         case let .transcriptExportFailed(details):
             return details
         case let .storageSetupFailed(details):
+            return details
+        case let .sessionDeletionFailed(details):
             return details
         }
     }

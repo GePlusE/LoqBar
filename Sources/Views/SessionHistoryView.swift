@@ -60,13 +60,18 @@ struct SessionHistoryView: View {
 
                     LazyVStack(alignment: .leading, spacing: 16) {
                         ForEach(filteredSessions) { session in
-                            NavigationLink {
-                                SessionDetailView(sessionID: session.id)
-                                    .environmentObject(appModel)
-                            } label: {
-                                SessionRow(session: session)
+                            SwipeToDeleteSessionCard(
+                                sessionID: session.id,
+                                onDelete: { appModel.deleteSession(session.id) }
+                            ) {
+                                NavigationLink {
+                                    SessionDetailView(sessionID: session.id)
+                                        .environmentObject(appModel)
+                                } label: {
+                                    SessionRow(session: session)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
 
                         if filteredSessions.isEmpty {
@@ -448,5 +453,76 @@ private struct SessionRow: View {
         case .failed:
             return .red
         }
+    }
+}
+
+private struct SwipeToDeleteSessionCard<Content: View>: View {
+    let sessionID: UUID
+    let onDelete: () -> Void
+    let content: Content
+
+    @State private var offsetX: CGFloat = 0
+    @GestureState private var dragTranslationX: CGFloat = 0
+
+    private let revealWidth: CGFloat = 108
+    private let fullDeleteThreshold: CGFloat = 160
+
+    init(sessionID: UUID, onDelete: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+        self.sessionID = sessionID
+        self.onDelete = onDelete
+        self.content = content()
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.red.opacity(0.9))
+
+            Button(role: .destructive, action: onDelete) {
+                VStack(spacing: 6) {
+                    Image(systemName: "trash")
+                        .font(.headline)
+                    Text("Delete")
+                        .font(.caption.weight(.semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(width: revealWidth)
+                .frame(maxHeight: .infinity)
+            }
+            .buttonStyle(.plain)
+
+            content
+                .offset(x: liveOffsetX)
+                .contentShape(Rectangle())
+                .gesture(dragGesture)
+        }
+        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: offsetX)
+    }
+
+    private var liveOffsetX: CGFloat {
+        let combined = offsetX + dragTranslationX
+        return min(0, max(-revealWidth * 1.45, combined))
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .local)
+            .updating($dragTranslationX) { value, state, _ in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                state = value.translation.width
+            }
+            .onEnded { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+
+                let proposedOffset = offsetX + value.translation.width
+
+                if proposedOffset <= -fullDeleteThreshold {
+                    onDelete()
+                    offsetX = 0
+                } else if proposedOffset <= -(revealWidth / 2) {
+                    offsetX = -revealWidth
+                } else {
+                    offsetX = 0
+                }
+            }
     }
 }
