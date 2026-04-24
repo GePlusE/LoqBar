@@ -476,7 +476,12 @@ private struct SwipeToDeleteSessionCard<Content: View>: View {
     var body: some View {
         ZStack(alignment: .trailing) {
             RoundedRectangle(cornerRadius: 20)
+                .fill(Color(nsColor: .windowBackgroundColor))
+
+            RoundedRectangle(cornerRadius: 20)
                 .fill(Color.red.opacity(0.9))
+                .frame(width: max(0, -liveOffsetX))
+                .frame(maxWidth: .infinity, alignment: .trailing)
 
             Button(role: .destructive, action: onDelete) {
                 VStack(spacing: 6) {
@@ -490,12 +495,14 @@ private struct SwipeToDeleteSessionCard<Content: View>: View {
                 .frame(maxHeight: .infinity)
             }
             .buttonStyle(.plain)
+            .opacity(liveOffsetX < -10 ? 1 : 0)
 
             content
                 .offset(x: liveOffsetX)
                 .contentShape(Rectangle())
                 .gesture(dragGesture)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 20))
         .animation(.spring(response: 0.22, dampingFraction: 0.9), value: offsetX)
     }
 
