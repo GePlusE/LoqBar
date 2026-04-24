@@ -32,6 +32,22 @@ The following areas are intentionally scaffolded but not yet fully implemented:
 swift build
 ```
 
+## App Bundle
+
+LoqBar can also be wrapped into a proper macOS `.app` bundle:
+
+```bash
+./Packaging/build-app.sh
+```
+
+That produces:
+
+```bash
+dist/LoqBar.app
+```
+
+Packaging details and signing/notarization notes are documented in [Packaging/README.md](/Users/gepluse/Coding/LoqBar/Packaging/README.md).
+
 ## Validation
 
 The validated manual capture procedure is documented in [TESTING.md](/Users/gepluse/Coding/LoqBar/TESTING.md).
