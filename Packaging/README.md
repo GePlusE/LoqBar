@@ -8,7 +8,7 @@ This folder contains the first app-bundle packaging flow for LoqBar.
 
 - `LoqBar.app/Contents/MacOS/LoqBar`
 - `LoqBar.app/Contents/Info.plist`
-- optional `LoqBar.app/Contents/Resources/LoqBar.icns`
+- `LoqBar.app/Contents/Resources/LoqBar.icns` when `Packaging/LoqBar.appiconset` or `Packaging/LoqBar.icns` is present
 
 The bundle is created in:
 
@@ -23,6 +23,10 @@ dist/LoqBar.app
 ```
 
 By default this uses ad-hoc signing (`SIGNING_IDENTITY=-`), which is fine for local testing.
+
+## App icon
+
+If `Packaging/LoqBar.appiconset` exists, `build-app.sh` automatically generates `Packaging/LoqBar.icns` with `iconutil` before bundling the app.
 
 ## Build with a real signing identity
 

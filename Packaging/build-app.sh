@@ -22,10 +22,21 @@ APP_BUNDLE="$OUTPUT_ROOT/$APP_NAME.app"
 
 INFO_PLIST_TEMPLATE="$ROOT_DIR/Packaging/LoqBar-Info.plist"
 ENTITLEMENTS_FILE="$ROOT_DIR/Packaging/LoqBar.entitlements"
+APPICONSET_PATH="$ROOT_DIR/Packaging/LoqBar.appiconset"
+ICNS_PATH="$ROOT_DIR/Packaging/LoqBar.icns"
 
 mkdir -p "$OUTPUT_ROOT"
 mkdir -p "$BUILD_HOME" "$CLANG_MODULE_CACHE_PATH" "$SWIFTPM_MODULECACHE_OVERRIDE"
 rm -rf "$APP_BUNDLE"
+
+if [[ ! -f "$ICNS_PATH" && -d "$APPICONSET_PATH" ]]; then
+  echo "Generating LoqBar.icns from app icon set..."
+  TEMP_ICONSET_DIR="$(mktemp -d /tmp/loqbar-iconset.XXXXXX).iconset"
+  mkdir -p "$TEMP_ICONSET_DIR"
+  cp "$APPICONSET_PATH"/icon_*.png "$TEMP_ICONSET_DIR/"
+  iconutil --convert icns "$TEMP_ICONSET_DIR" --output "$ICNS_PATH"
+  rm -rf "$TEMP_ICONSET_DIR"
+fi
 
 echo "Building $APP_NAME ($CONFIGURATION)..."
 swift build -c "$CONFIGURATION" --product "$APP_NAME"
