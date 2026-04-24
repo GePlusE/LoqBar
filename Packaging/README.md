@@ -16,6 +16,12 @@ The bundle is created in:
 dist/LoqBar.app
 ```
 
+The script also creates a distributable ZIP:
+
+```bash
+dist/LoqBar.zip
+```
+
 ## Build a local app bundle
 
 ```bash
@@ -48,6 +54,7 @@ BUILD_NUMBER="42" \
 ```bash
 codesign --verify --deep --strict dist/LoqBar.app
 spctl --assess --type execute dist/LoqBar.app
+unzip -l dist/LoqBar.zip
 ```
 
 ## Notarization later
@@ -64,7 +71,6 @@ xcrun stapler staple dist/LoqBar.app
 
 This packaging layer does **not** yet provide:
 
-- a custom app icon
 - DMG creation
 - Sparkle or another updater
 - a login-item helper target

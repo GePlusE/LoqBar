@@ -19,6 +19,7 @@ SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$ROOT_DIR/dist}"
 BUILD_ROOT="$ROOT_DIR/.build/apple/$CONFIGURATION"
 APP_BUNDLE="$OUTPUT_ROOT/$APP_NAME.app"
+ZIP_PATH="$OUTPUT_ROOT/$APP_NAME.zip"
 
 INFO_PLIST_TEMPLATE="$ROOT_DIR/Packaging/LoqBar-Info.plist"
 ENTITLEMENTS_FILE="$ROOT_DIR/Packaging/LoqBar.entitlements"
@@ -28,6 +29,7 @@ ICNS_PATH="$ROOT_DIR/Packaging/LoqBar.icns"
 mkdir -p "$OUTPUT_ROOT"
 mkdir -p "$BUILD_HOME" "$CLANG_MODULE_CACHE_PATH" "$SWIFTPM_MODULECACHE_OVERRIDE"
 rm -rf "$APP_BUNDLE"
+rm -f "$ZIP_PATH"
 
 if [[ ! -f "$ICNS_PATH" && -d "$APPICONSET_PATH" ]]; then
   echo "Generating LoqBar.icns from app icon set..."
@@ -66,14 +68,20 @@ fi
 echo "Codesigning with identity: $SIGNING_IDENTITY"
 codesign --force --deep --timestamp=none --entitlements "$ENTITLEMENTS_FILE" --sign "$SIGNING_IDENTITY" "$APP_BUNDLE"
 
+echo "Creating distributable ZIP..."
+ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
+
 echo
 echo "Built app bundle:"
 echo "  $APP_BUNDLE"
+echo "Built release ZIP:"
+echo "  $ZIP_PATH"
 echo
 echo "Next steps:"
 echo "  open \"$APP_BUNDLE\""
 echo "  codesign --verify --deep --strict \"$APP_BUNDLE\""
 echo "  spctl --assess --type execute \"$APP_BUNDLE\""
+echo "  unzip -l \"$ZIP_PATH\""
 echo
 echo "For distribution signing:"
 echo "  SIGNING_IDENTITY=\"Developer ID Application: Your Name (TEAMID)\" ./Packaging/build-app.sh"
