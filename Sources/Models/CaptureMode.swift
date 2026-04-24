@@ -12,9 +12,9 @@ enum CaptureMode: String, Codable, CaseIterable, Identifiable {
         case .auto:
             return "Auto"
         case .localMeeting:
-            return "Local Meeting Mode"
+            return "Local"
         case .call:
-            return "Call Mode"
+            return "Remote"
         }
     }
 }

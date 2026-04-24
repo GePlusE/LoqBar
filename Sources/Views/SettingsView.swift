@@ -137,6 +137,16 @@ struct SettingsView: View {
                 .labelsHidden()
                 .frame(maxWidth: 340, alignment: .leading)
             }
+
+            infoCard(
+                title: "Permissions",
+                body: "Refresh LoqBar's permission state after changing microphone or screen recording access in System Settings."
+            )
+
+            Button("Refresh Permissions") {
+                appModel.refreshPermissions()
+            }
+            .buttonStyle(.bordered)
         }
     }
 

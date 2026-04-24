@@ -70,21 +70,14 @@ struct MenuBarView: View {
     }
 
     private var controls: some View {
-        HStack(spacing: 10) {
-            Button(appModel.activeSession == nil ? "Start" : "Stop") {
-                if appModel.activeSession == nil {
-                    appModel.startRecording()
-                } else {
-                    appModel.stopRecording()
-                }
+        Button(appModel.activeSession == nil ? "Start" : "Stop") {
+            if appModel.activeSession == nil {
+                appModel.startRecording()
+            } else {
+                appModel.stopRecording()
             }
-            .buttonStyle(.borderedProminent)
-
-            Button("Refresh Permissions") {
-                appModel.refreshPermissions()
-            }
-            .buttonStyle(.bordered)
         }
+        .buttonStyle(.borderedProminent)
     }
 
     private var quickActions: some View {
@@ -102,12 +95,6 @@ struct MenuBarView: View {
             }
 
             Menu("More") {
-                Button("Refresh Permissions") {
-                    appModel.refreshPermissions()
-                }
-
-                Divider()
-
                 Button("Transcripts") {
                     appModel.openTranscriptFolder()
                 }
