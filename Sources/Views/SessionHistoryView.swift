@@ -44,6 +44,7 @@ private enum SessionHistoryStatusFilter: String, CaseIterable, Identifiable {
 struct SessionHistoryView: View {
     @EnvironmentObject private var appModel: AppModel
     @State private var searchText = ""
+    @State private var showFilters = false
     @State private var selectedModeFilter: SessionHistoryModeFilter = .all
     @State private var selectedStatusFilter: SessionHistoryStatusFilter = .all
     @State private var useStartDateFilter = false
@@ -111,52 +112,89 @@ struct SessionHistoryView: View {
                 .textFieldStyle(.roundedBorder)
                 .padding(.top, 6)
 
-            HStack(spacing: 12) {
-                Picker("Mode", selection: $selectedModeFilter) {
-                    ForEach(SessionHistoryModeFilter.allCases) { filter in
-                        Text(filter.title).tag(filter)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: 220, alignment: .leading)
+            Button {
+                showFilters.toggle()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: showFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                    Text("Filters")
+                        .font(.subheadline.weight(.semibold))
 
-                Picker("Status", selection: $selectedStatusFilter) {
-                    ForEach(SessionHistoryStatusFilter.allCases) { filter in
-                        Text(filter.title).tag(filter)
+                    if activeFilterCount > 0 {
+                        Text("\(activeFilterCount)")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.secondary.opacity(0.12))
+                            .clipShape(Capsule())
                     }
+
+                    if !activeFilterSummary.isEmpty {
+                        Text(activeFilterSummary)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: showFilters ? "chevron.up" : "chevron.down")
+                        .foregroundStyle(.secondary)
                 }
-                .labelsHidden()
-                .frame(maxWidth: 220, alignment: .leading)
             }
+            .buttonStyle(.plain)
 
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 12) {
-                    Toggle("From", isOn: $useStartDateFilter)
-                        .toggleStyle(.checkbox)
-                        .frame(width: 70, alignment: .leading)
+            if showFilters {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        Picker("Mode", selection: $selectedModeFilter) {
+                            ForEach(SessionHistoryModeFilter.allCases) { filter in
+                                Text(filter.title).tag(filter)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 220, alignment: .leading)
 
-                    DatePicker(
-                        "From date",
-                        selection: $startDateFilter,
-                        displayedComponents: [.date]
-                    )
-                    .labelsHidden()
-                    .disabled(!useStartDateFilter)
+                        Picker("Status", selection: $selectedStatusFilter) {
+                            ForEach(SessionHistoryStatusFilter.allCases) { filter in
+                                Text(filter.title).tag(filter)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(maxWidth: 220, alignment: .leading)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 12) {
+                            Toggle("From", isOn: $useStartDateFilter)
+                                .toggleStyle(.checkbox)
+                                .frame(width: 70, alignment: .leading)
+
+                            DatePicker(
+                                "From date",
+                                selection: $startDateFilter,
+                                displayedComponents: [.date]
+                            )
+                            .labelsHidden()
+                            .disabled(!useStartDateFilter)
+                        }
+
+                        HStack(spacing: 12) {
+                            Toggle("To", isOn: $useEndDateFilter)
+                                .toggleStyle(.checkbox)
+                                .frame(width: 70, alignment: .leading)
+
+                            DatePicker(
+                                "To date",
+                                selection: $endDateFilter,
+                                displayedComponents: [.date]
+                            )
+                            .labelsHidden()
+                            .disabled(!useEndDateFilter)
+                        }
+                    }
                 }
-
-                HStack(spacing: 12) {
-                    Toggle("To", isOn: $useEndDateFilter)
-                        .toggleStyle(.checkbox)
-                        .frame(width: 70, alignment: .leading)
-
-                    DatePicker(
-                        "To date",
-                        selection: $endDateFilter,
-                        displayedComponents: [.date]
-                    )
-                    .labelsHidden()
-                    .disabled(!useEndDateFilter)
-                }
+                .padding(.top, 4)
             }
         }
         .padding(24)
@@ -254,6 +292,31 @@ struct SessionHistoryView: View {
             .components(separatedBy: "# Analysis Notes")
             .first?
             .lowercased() ?? ""
+    }
+
+    private var activeFilterCount: Int {
+        var count = 0
+        if selectedModeFilter != .all { count += 1 }
+        if selectedStatusFilter != .all { count += 1 }
+        if useStartDateFilter { count += 1 }
+        if useEndDateFilter { count += 1 }
+        return count
+    }
+
+    private var activeFilterSummary: String {
+        var parts: [String] = []
+
+        if selectedModeFilter != .all {
+            parts.append(selectedModeFilter.title)
+        }
+        if selectedStatusFilter != .all {
+            parts.append(selectedStatusFilter.title)
+        }
+        if useStartDateFilter || useEndDateFilter {
+            parts.append("Date")
+        }
+
+        return parts.joined(separator: " · ")
     }
 }
 
