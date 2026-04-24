@@ -240,6 +240,32 @@ final class AppModel: ObservableObject {
         persist()
     }
 
+    func retryTranscription(for sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        guard !sessions[index].isActive else { return }
+        guard sessions[index].audioPath != nil || sessions[index].systemAudioPath != nil else {
+            present(error: .transcriptionExecutionFailed("This session does not have any saved audio files to transcribe yet."))
+            return
+        }
+
+        sessions[index].status = .processing
+        sessions[index].notes = "Retrying transcription..."
+        persist()
+
+        Task {
+            do {
+                try transcribeAndExportSession(sessionID)
+            } catch let error as AppError {
+                markSessionCompletedWithTranscriptionIssue(sessionID, error: error)
+            } catch {
+                markSessionCompletedWithTranscriptionIssue(
+                    sessionID,
+                    error: .transcriptionExecutionFailed("Recording finished and audio was saved, but transcription could not complete: \(error.localizedDescription)")
+                )
+            }
+        }
+    }
+
     func updateAlias(for session: SessionRecord, speakerLabel: String, alias: String) {
         guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
         sessions[index].aliasMapping[speakerLabel] = alias.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -438,6 +464,21 @@ final class AppModel: ObservableObject {
         processingMessage = "Generating transcript export"
 
         do {
+            try transcribeAndExportSession(sessionID)
+        } catch let error as AppError {
+            markSessionCompletedWithTranscriptionIssue(sessionID, error: error)
+        } catch {
+            markSessionCompletedWithTranscriptionIssue(
+                sessionID,
+                error: .transcriptionExecutionFailed("Recording finished and audio was saved, but transcription could not complete: \(error.localizedDescription)")
+            )
+        }
+    }
+
+    private func transcribeAndExportSession(_ sessionID: UUID) throws {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+
+        do {
             let plan = transcriptionService.makePlan(for: sessions[sessionIndex])
             let content = try transcriptionService.transcribe(
                 plan: plan,
@@ -456,13 +497,6 @@ final class AppModel: ObservableObject {
             sessions[sessionIndex].notes = ([transcript.summary] + transcript.planNotes).joined(separator: " ")
             processingMessage = "Transcript exported"
             persist()
-        } catch let error as AppError {
-            markSessionCompletedWithTranscriptionIssue(sessionID, error: error)
-        } catch {
-            markSessionCompletedWithTranscriptionIssue(
-                sessionID,
-                error: .transcriptionExecutionFailed("Recording finished and audio was saved, but transcription could not complete: \(error.localizedDescription)")
-            )
         }
     }
 

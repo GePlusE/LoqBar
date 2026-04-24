@@ -22,6 +22,11 @@ struct SessionDetailView: View {
                             appModel.renameSession(session, title: editedTitle)
                         }
 
+                        Button("Retry Transcription") {
+                            appModel.retryTranscription(for: session.id)
+                        }
+                        .disabled(session.isActive || !session.hasTranscribableAudio)
+
                         LabeledContent("Status", value: session.status.title)
                         LabeledContent("Capture mode", value: session.captureMode.title)
                         LabeledContent("Audio source", value: session.audioSourceType.title)

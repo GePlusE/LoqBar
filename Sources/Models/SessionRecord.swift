@@ -23,6 +23,10 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         status == .recording || status == .processing
     }
 
+    var hasTranscribableAudio: Bool {
+        audioPath != nil || systemAudioPath != nil
+    }
+
     static func newDraft(captureMode: CaptureMode, audioSourceType: AudioSourceType) -> SessionRecord {
         let now = Date()
         return SessionRecord(
