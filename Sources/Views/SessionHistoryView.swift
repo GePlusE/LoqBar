@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 private enum SessionHistoryModeFilter: String, CaseIterable, Identifiable {
     case all
@@ -502,6 +503,13 @@ private struct SwipeToDeleteSessionCard<Content: View>: View {
         }
         .contentShape(Rectangle())
         .highPriorityGesture(dragGesture)
+        .overlay {
+            TrackpadSwipeCatcher(
+                onLeftSwipe: handleLeftSwipe,
+                onRightSwipe: handleRightSwipe
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+        }
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .animation(.spring(response: 0.22, dampingFraction: 0.9), value: offsetX)
     }
@@ -531,5 +539,81 @@ private struct SwipeToDeleteSessionCard<Content: View>: View {
                     offsetX = 0
                 }
             }
+    }
+
+    private func handleLeftSwipe() {
+        if offsetX <= -(revealWidth / 2) {
+            onDelete()
+            offsetX = 0
+        } else {
+            offsetX = -revealWidth
+        }
+    }
+
+    private func handleRightSwipe() {
+        offsetX = 0
+    }
+}
+
+private struct TrackpadSwipeCatcher: NSViewRepresentable {
+    let onLeftSwipe: () -> Void
+    let onRightSwipe: () -> Void
+
+    func makeNSView(context: Context) -> SwipeTrackingView {
+        let view = SwipeTrackingView()
+        view.onLeftSwipe = onLeftSwipe
+        view.onRightSwipe = onRightSwipe
+        return view
+    }
+
+    func updateNSView(_ nsView: SwipeTrackingView, context: Context) {
+        nsView.onLeftSwipe = onLeftSwipe
+        nsView.onRightSwipe = onRightSwipe
+    }
+}
+
+private final class SwipeTrackingView: NSView {
+    var onLeftSwipe: (() -> Void)?
+    var onRightSwipe: (() -> Void)?
+    private var accumulatedHorizontalSwipe: CGFloat = 0
+    private let swipeThreshold: CGFloat = 70
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        self
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        let horizontal = event.scrollingDeltaX
+        let vertical = event.scrollingDeltaY
+
+        guard abs(horizontal) > abs(vertical), abs(horizontal) > 0 else {
+            nextResponder?.scrollWheel(with: event)
+            return
+        }
+
+        accumulatedHorizontalSwipe += horizontal
+
+        if accumulatedHorizontalSwipe >= swipeThreshold {
+            accumulatedHorizontalSwipe = 0
+            onLeftSwipe?()
+        } else if accumulatedHorizontalSwipe <= -swipeThreshold {
+            accumulatedHorizontalSwipe = 0
+            onRightSwipe?()
+        }
+
+        if event.phase == .ended || event.momentumPhase == .ended {
+            accumulatedHorizontalSwipe = 0
+        }
     }
 }

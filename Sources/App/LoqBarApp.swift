@@ -35,6 +35,14 @@ final class LoqBarAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            NSApp.windows.forEach { window in
+                if window.title.localizedCaseInsensitiveContains("Settings") ||
+                    window.title.localizedCaseInsensitiveContains("Recent Sessions") {
+                    window.close()
+                }
+            }
+        }
     }
 
     @MainActor
