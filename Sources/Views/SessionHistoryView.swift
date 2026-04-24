@@ -5,16 +5,29 @@ struct SessionHistoryView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(appModel.sessions) { session in
-                    NavigationLink {
-                        SessionDetailView(sessionID: session.id)
-                            .environmentObject(appModel)
-                    } label: {
-                        SessionRow(session: session)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    headerCard
+
+                    LazyVStack(alignment: .leading, spacing: 16) {
+                        ForEach(appModel.sessions) { session in
+                            NavigationLink {
+                                SessionDetailView(sessionID: session.id)
+                                    .environmentObject(appModel)
+                            } label: {
+                                SessionRow(session: session)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
+                .padding(.horizontal, 28)
+                .padding(.top, 28)
+                .padding(.bottom, 40)
+                .frame(maxWidth: 980, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(Color(nsColor: .windowBackgroundColor))
             .navigationTitle("Recent Sessions")
         }
         .onAppear {
@@ -24,17 +37,32 @@ struct SessionHistoryView: View {
             appModel.restoreMenuBarPresentationIfPossible()
         }
     }
+
+    private var headerCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Recent Sessions")
+                .font(.largeTitle.weight(.semibold))
+            Text("Review completed captures, spot pending transcription work, and jump into speaker labeling.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 22))
+    }
 }
 
 private struct SessionRow: View {
     let session: SessionRecord
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 14) {
             Text(session.title)
-                .font(.headline)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.primary)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 statusBadge
                 Text("\(session.captureMode.title) • \(session.durationSeconds)s")
                     .font(.subheadline)
@@ -43,19 +71,23 @@ private struct SessionRow: View {
 
             if !session.notes.isEmpty {
                 Text(session.notes)
-                    .font(.footnote)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                    .multilineTextAlignment(.leading)
             }
         }
-        .padding(.vertical, 4)
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 
     private var statusBadge: some View {
         Text(session.displayStatusTitle)
             .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .background(statusColor.opacity(0.16))
             .foregroundStyle(statusColor)
             .clipShape(Capsule())

@@ -9,89 +9,162 @@ struct SessionDetailView: View {
     var body: some View {
         Group {
             if let session = appModel.sessions.first(where: { $0.id == sessionID }) {
-                Form {
-                    Section("Session") {
-                        TextField("Title", text: Binding(
-                            get: {
-                                editedTitle.isEmpty ? session.title : editedTitle
-                            },
-                            set: { editedTitle = $0 }
-                        ))
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        sessionCard(for: session)
+                        speakerAliasesCard(for: session)
 
-                        Button("Save Title") {
-                            appModel.renameSession(session, title: editedTitle)
-                        }
-
-                        Button("Retry Transcription") {
-                            appModel.retryTranscription(for: session.id)
-                        }
-                        .disabled(session.isActive || !session.hasTranscribableAudio)
-
-                        HStack {
-                            Text("Status")
-                            Spacer()
-                            Text(session.displayStatusTitle)
-                                .font(.subheadline.weight(.semibold))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(statusColor(for: session).opacity(0.16))
-                                .foregroundStyle(statusColor(for: session))
-                                .clipShape(Capsule())
-                        }
-
-                        LabeledContent("Transcription", value: session.transcriptionStatusSummary)
-                        LabeledContent("Capture mode", value: session.captureMode.title)
-                        LabeledContent("Audio source", value: session.audioSourceType.title)
-                        LabeledContent("Microphone audio", value: session.audioPath ?? "Not available")
-                        LabeledContent("System audio", value: session.systemAudioPath ?? "Not available")
-                        LabeledContent("Transcript", value: session.transcriptPath ?? "Not exported yet")
-                    }
-
-                    Section("Speaker Aliases") {
-                        if session.speakerLabels.isEmpty {
-                            Text("Speaker aliases will appear after LoqBar detects speakers in the transcript.")
-                                .foregroundStyle(.secondary)
-                        }
-
-                        ForEach(session.speakerLabels, id: \.self) { key in
-                            TextField(key, text: Binding(
-                                get: { session.aliasMapping[key] ?? "" },
-                                set: { appModel.updateAlias(for: session, speakerLabel: key, alias: $0) }
-                            ))
+                        let preview = transcriptPreview(for: session)
+                        if !preview.isEmpty {
+                            transcriptPreviewCard(preview, session: session)
                         }
                     }
-
-                    if !transcriptPreview(for: session).isEmpty {
-                        Section("Transcript Preview") {
-                            ForEach(transcriptPreview(for: session)) { segment in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    HStack {
-                                        Text(displaySpeakerName(for: segment.speakerLabel, session: session))
-                                            .font(.headline)
-                                        Spacer()
-                                        Text(segment.timestamp)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-
-                                    if displaySpeakerName(for: segment.speakerLabel, session: session) != segment.speakerLabel {
-                                        Text(segment.speakerLabel)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-
-                                    Text(segment.text)
-                                        .textSelection(.enabled)
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                    }
+                    .padding(.horizontal, 28)
+                    .padding(.top, 28)
+                    .padding(.bottom, 40)
+                    .frame(maxWidth: 980, alignment: .leading)
                 }
-                .padding(20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(Color(nsColor: .windowBackgroundColor))
             } else {
                 ContentUnavailableView("Session Not Found", systemImage: "tray")
             }
+        }
+    }
+
+    private func sessionCard(for session: SessionRecord) -> some View {
+        detailCard("Session") {
+            VStack(alignment: .leading, spacing: 16) {
+                detailField("Title") {
+                    TextField("Title", text: Binding(
+                        get: { editedTitle.isEmpty ? session.title : editedTitle },
+                        set: { editedTitle = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                }
+
+                HStack(spacing: 12) {
+                    Button("Save Title") {
+                        appModel.renameSession(session, title: editedTitle)
+                    }
+
+                    Button("Retry Transcription") {
+                        appModel.retryTranscription(for: session.id)
+                    }
+                    .disabled(session.isActive || !session.hasTranscribableAudio)
+                }
+
+                detailRow("Status") {
+                    Text(session.displayStatusTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(statusColor(for: session).opacity(0.16))
+                        .foregroundStyle(statusColor(for: session))
+                        .clipShape(Capsule())
+                }
+
+                detailRow("Transcription", value: session.transcriptionStatusSummary)
+                detailRow("Capture mode", value: session.captureMode.title)
+                detailRow("Audio source", value: session.audioSourceType.title)
+                detailRow("Microphone audio", value: session.audioPath ?? "Not available")
+                detailRow("System audio", value: session.systemAudioPath ?? "Not available")
+                detailRow("Transcript", value: session.transcriptPath ?? "Not exported yet")
+            }
+        }
+    }
+
+    private func speakerAliasesCard(for session: SessionRecord) -> some View {
+        detailCard("Speaker Aliases") {
+            VStack(alignment: .leading, spacing: 14) {
+                if session.speakerLabels.isEmpty {
+                    Text("Speaker aliases will appear after LoqBar detects speakers in the transcript.")
+                        .foregroundStyle(.secondary)
+                }
+
+                ForEach(session.speakerLabels, id: \.self) { key in
+                    detailField(key) {
+                        TextField(key, text: Binding(
+                            get: { session.aliasMapping[key] ?? "" },
+                            set: { appModel.updateAlias(for: session, speakerLabel: key, alias: $0) }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                    }
+                }
+            }
+        }
+    }
+
+    private func transcriptPreviewCard(_ preview: [TranscriptPreviewSegment], session: SessionRecord) -> some View {
+        detailCard("Transcript Preview") {
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(preview) { segment in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(displaySpeakerName(for: segment.speakerLabel, session: session))
+                                .font(.headline)
+                            Spacer()
+                            Text(segment.timestamp)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if displaySpeakerName(for: segment.speakerLabel, session: session) != segment.speakerLabel {
+                            Text(segment.speakerLabel)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text(segment.text)
+                            .textSelection(.enabled)
+                    }
+
+                    if segment.id != preview.last?.id {
+                        Divider()
+                    }
+                }
+            }
+        }
+    }
+
+    private func detailCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(title)
+                .font(.title3.weight(.semibold))
+
+            content()
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func detailField<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.headline)
+            content()
+        }
+    }
+
+    private func detailRow(_ label: String, value: String) -> some View {
+        detailRow(label) {
+            Text(value)
+                .multilineTextAlignment(.trailing)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        }
+    }
+
+    private func detailRow<Content: View>(_ label: String, @ViewBuilder value: () -> Content) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            Text(label)
+                .font(.headline)
+                .frame(width: 150, alignment: .leading)
+
+            value()
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
 
