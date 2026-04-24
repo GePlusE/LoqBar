@@ -1,7 +1,51 @@
 import SwiftUI
 
+private enum SessionHistoryModeFilter: String, CaseIterable, Identifiable {
+    case all
+    case call
+    case localMeeting
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .all:
+            return "All Modes"
+        case .call:
+            return "Call"
+        case .localMeeting:
+            return "Local Meeting"
+        }
+    }
+}
+
+private enum SessionHistoryStatusFilter: String, CaseIterable, Identifiable {
+    case all
+    case completed
+    case transcriptionPending
+    case failed
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .all:
+            return "All Statuses"
+        case .completed:
+            return "Completed"
+        case .transcriptionPending:
+            return "Pending"
+        case .failed:
+            return "Failed"
+        }
+    }
+}
+
 struct SessionHistoryView: View {
     @EnvironmentObject private var appModel: AppModel
+    @State private var searchText = ""
+    @State private var selectedModeFilter: SessionHistoryModeFilter = .all
+    @State private var selectedStatusFilter: SessionHistoryStatusFilter = .all
 
     var body: some View {
         NavigationStack {
@@ -10,7 +54,7 @@ struct SessionHistoryView: View {
                     headerCard
 
                     LazyVStack(alignment: .leading, spacing: 16) {
-                        ForEach(appModel.sessions) { session in
+                        ForEach(filteredSessions) { session in
                             NavigationLink {
                                 SessionDetailView(sessionID: session.id)
                                     .environmentObject(appModel)
@@ -18,6 +62,10 @@ struct SessionHistoryView: View {
                                 SessionRow(session: session)
                             }
                             .buttonStyle(.plain)
+                        }
+
+                        if filteredSessions.isEmpty {
+                            emptyStateCard
                         }
                     }
                 }
@@ -38,6 +86,14 @@ struct SessionHistoryView: View {
         }
     }
 
+    private var filteredSessions: [SessionRecord] {
+        appModel.sessions.filter { session in
+            matchesModeFilter(session) &&
+            matchesStatusFilter(session) &&
+            matchesSearch(session)
+        }
+    }
+
     private var headerCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Recent Sessions")
@@ -45,11 +101,106 @@ struct SessionHistoryView: View {
             Text("Review completed captures, spot pending transcription work, and jump into speaker labeling.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            TextField("Search title, notes, transcript, or participants", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .padding(.top, 6)
+
+            HStack(spacing: 12) {
+                Picker("Mode", selection: $selectedModeFilter) {
+                    ForEach(SessionHistoryModeFilter.allCases) { filter in
+                        Text(filter.title).tag(filter)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 220, alignment: .leading)
+
+                Picker("Status", selection: $selectedStatusFilter) {
+                    ForEach(SessionHistoryStatusFilter.allCases) { filter in
+                        Text(filter.title).tag(filter)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 220, alignment: .leading)
+            }
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.secondary.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 22))
+    }
+
+    private var emptyStateCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("No Matching Sessions")
+                .font(.title3.weight(.semibold))
+            Text("Try a broader search term or reset one of the filters.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 22))
+    }
+
+    private func matchesModeFilter(_ session: SessionRecord) -> Bool {
+        switch selectedModeFilter {
+        case .all:
+            return true
+        case .call:
+            return session.captureMode == .call
+        case .localMeeting:
+            return session.captureMode == .localMeeting
+        }
+    }
+
+    private func matchesStatusFilter(_ session: SessionRecord) -> Bool {
+        switch selectedStatusFilter {
+        case .all:
+            return true
+        case .completed:
+            return session.status == .completed && !session.isTranscriptionPending
+        case .transcriptionPending:
+            return session.isTranscriptionPending
+        case .failed:
+            return session.status == .failed
+        }
+    }
+
+    private func matchesSearch(_ session: SessionRecord) -> Bool {
+        let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !trimmedQuery.isEmpty else { return true }
+
+        let participantText = session.aliasMapping.values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .joined(separator: " ")
+        let transcriptText = transcriptSearchText(for: session)
+        let haystack = [
+            session.title.lowercased(),
+            session.notes.lowercased(),
+            session.captureMode.title.lowercased(),
+            session.displayStatusTitle.lowercased(),
+            participantText,
+            transcriptText
+        ].joined(separator: "\n")
+
+        return haystack.contains(trimmedQuery)
+    }
+
+    private func transcriptSearchText(for session: SessionRecord) -> String {
+        guard let transcriptPath = session.transcriptPath,
+              let markdown = try? String(contentsOfFile: transcriptPath, encoding: .utf8) else {
+            return ""
+        }
+
+        return markdown
+            .components(separatedBy: "# Transcript")
+            .dropFirst()
+            .joined(separator: "# Transcript")
+            .components(separatedBy: "# Analysis Notes")
+            .first?
+            .lowercased() ?? ""
     }
 }
 
