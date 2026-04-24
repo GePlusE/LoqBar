@@ -47,6 +47,8 @@ struct AppSettings: Codable {
     var transcriptionModelPath: String
     var transcriptionLanguage: String
     var autoCleanupEnabled: Bool
+    var lastCleanupAt: Date?
+    var lastCleanupSummary: String?
     var launchAtLoginEnabled: Bool
     var firstRunCompleted: Bool
 
@@ -60,6 +62,8 @@ struct AppSettings: Codable {
         transcriptionModelPath: "",
         transcriptionLanguage: "auto",
         autoCleanupEnabled: true,
+        lastCleanupAt: nil,
+        lastCleanupSummary: nil,
         launchAtLoginEnabled: false,
         firstRunCompleted: false
     )
@@ -143,6 +147,25 @@ enum AudioRetentionPolicy: String, Codable, CaseIterable, Identifiable {
             return "Keep 90 Days"
         case .keepForever:
             return "Keep Indefinitely"
+        }
+    }
+
+    func cutoffDate(relativeTo now: Date) -> Date? {
+        switch self {
+        case .deleteImmediately:
+            return now
+        case .days7:
+            return Calendar.current.date(byAdding: .day, value: -7, to: now)
+        case .days14:
+            return Calendar.current.date(byAdding: .day, value: -14, to: now)
+        case .days30:
+            return Calendar.current.date(byAdding: .day, value: -30, to: now)
+        case .days60:
+            return Calendar.current.date(byAdding: .day, value: -60, to: now)
+        case .days90:
+            return Calendar.current.date(byAdding: .day, value: -90, to: now)
+        case .keepForever:
+            return nil
         }
     }
 }

@@ -186,6 +186,16 @@ struct SettingsView: View {
             }
 
             Toggle("Automatic cleanup", isOn: $appModel.settings.autoCleanupEnabled)
+
+            infoCard(
+                title: "Cleanup Status",
+                body: cleanupStatusText
+            )
+
+            Button("Run Cleanup Now") {
+                appModel.runCleanupNow()
+            }
+            .buttonStyle(.bordered)
         }
     }
 
@@ -363,6 +373,16 @@ struct SettingsView: View {
         case .notConfigured, .incompleteExternal:
             return "Setup Needed"
         }
+    }
+
+    private var cleanupStatusText: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+
+        let lastRunText = appModel.settings.lastCleanupAt.map { formatter.string(from: $0) } ?? "Not run yet"
+        let summary = appModel.settings.lastCleanupSummary ?? "LoqBar has not run cleanup yet."
+        return "Last run: \(lastRunText)\n\(summary)"
     }
 
     private func pathField(

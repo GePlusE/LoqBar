@@ -20,6 +20,7 @@ final class AppModel: ObservableObject {
     private let recordingCoordinator: AudioCaptureCoordinator
     private let audioStorageOptimizer: AudioStorageOptimizer
     private let transcriptRevisionService: TranscriptRevisionService
+    private let retentionCleanupService: RetentionCleanupService
 
     init(
         permissionsService: PermissionsService = PermissionsService(),
@@ -30,7 +31,8 @@ final class AppModel: ObservableObject {
         captureService: CaptureService = CaptureService(),
         recordingCoordinator: AudioCaptureCoordinator = AudioCaptureCoordinator(),
         audioStorageOptimizer: AudioStorageOptimizer = AudioStorageOptimizer(),
-        transcriptRevisionService: TranscriptRevisionService = TranscriptRevisionService()
+        transcriptRevisionService: TranscriptRevisionService = TranscriptRevisionService(),
+        retentionCleanupService: RetentionCleanupService = RetentionCleanupService()
     ) {
         self.permissionsService = permissionsService
         self.loginItemService = loginItemService
@@ -41,6 +43,7 @@ final class AppModel: ObservableObject {
         self.recordingCoordinator = recordingCoordinator
         self.audioStorageOptimizer = audioStorageOptimizer
         self.transcriptRevisionService = transcriptRevisionService
+        self.retentionCleanupService = retentionCleanupService
 
         loadInitialState()
     }
@@ -80,6 +83,7 @@ final class AppModel: ObservableObject {
             needsOnboarding: !settings.firstRunCompleted,
             launchAtLogin: settings.launchAtLoginEnabled
         )
+        runRetentionCleanupIfNeeded()
     }
 
     func refreshPermissions() {
@@ -497,6 +501,10 @@ final class AppModel: ObservableObject {
         persist()
     }
 
+    func runCleanupNow() {
+        runRetentionCleanup(markRunTimestamp: true)
+    }
+
     func installManagedTranscriptionFiles() {
         do {
             let source = try resolveManagedTranscriptionInstallSource()
@@ -612,6 +620,7 @@ final class AppModel: ObservableObject {
 
         do {
             try transcribeAndExportSession(sessionID)
+            runRetentionCleanupIfNeeded()
         } catch let error as AppError {
             markSessionCompletedWithTranscriptionIssue(sessionID, error: error)
         } catch {
@@ -645,6 +654,23 @@ final class AppModel: ObservableObject {
             processingMessage = "Transcript exported"
             persist()
         }
+    }
+
+    private func runRetentionCleanupIfNeeded() {
+        guard settings.autoCleanupEnabled else { return }
+        runRetentionCleanup(markRunTimestamp: false)
+    }
+
+    private func runRetentionCleanup(markRunTimestamp: Bool) {
+        let result = retentionCleanupService.run(sessions: sessions, settings: settings)
+        sessions = result.sessions
+
+        if markRunTimestamp || result.deletedFileCount > 0 || result.deletedSessionFolderCount > 0 || settings.lastCleanupAt == nil {
+            settings.lastCleanupAt = Date()
+            settings.lastCleanupSummary = result.summary
+        }
+
+        persist()
     }
 
     private func markSessionFailed(_ sessionID: UUID, error: AppError) {
