@@ -82,7 +82,7 @@ struct TranscriptRevisionService {
         let segments = parseTranscriptSection(from: transcriptMarker + transcriptBodyRaw)
         let rebuiltBody = segments.map { segment in
             let activeEdit = edits[segment.key]
-            let currentText = activeEdit?.editedText ?? segment.currentText
+            let currentText = activeEdit?.editedText ?? baseTranscriptText(for: segment)
             let originalText = activeEdit?.originalText ?? segment.originalText
             let displaySpeaker = displaySpeakerName(for: segment.speakerLabel, aliasMapping: aliasMapping)
             var lines = ["[\(segment.timestamp)] \(displaySpeaker): \(currentText)"]
@@ -218,5 +218,9 @@ struct TranscriptRevisionService {
 
     private func escapeForYAML(_ text: String) -> String {
         text.replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
+    private func baseTranscriptText(for segment: EditableTranscriptSegment) -> String {
+        segment.isEdited ? segment.originalText : segment.currentText
     }
 }
