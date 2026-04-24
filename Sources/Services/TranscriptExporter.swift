@@ -34,9 +34,20 @@ struct TranscriptExporter {
 
         let sourceSummary = content.analysis.primarySources.joined(separator: ", ")
         let analysisNotes = content.analysis.notes.map { "- \($0)" }.joined(separator: "\n")
+        let manualCorrectionCount = session.transcriptEdits.count
         let transcriptBody = content.segments.map { segment in
             let marker = segment.lowConfidence ? "[low confidence] " : ""
-            return "[\(isoTimestamp(segment.absoluteTimestamp)) | +\(relativeTimestamp(segment.relativeOffset))] \(segment.speakerLabel): \(marker)\(segment.text)"
+            let key = transcriptSegmentKey(for: segment)
+            let activeEdit = session.transcriptEdits[key]
+            let originalText = "\(marker)\(activeEdit?.originalText ?? segment.text)"
+            let displayText = "\(marker)\(activeEdit?.editedText ?? segment.text)"
+            var lines = ["[\(isoTimestamp(segment.absoluteTimestamp)) | +\(relativeTimestamp(segment.relativeOffset))] \(segment.speakerLabel): \(displayText)"]
+
+            if displayText != originalText {
+                lines.append("_Manual correction from original transcript: \(originalText)_")
+            }
+
+            return lines.joined(separator: "\n")
         }.joined(separator: "\n\n")
 
         return """
@@ -54,6 +65,7 @@ struct TranscriptExporter {
           Speaker1: ""
           Speaker2: ""
         confidence_warnings: \(content.warningCount)
+        manual_corrections: \(manualCorrectionCount)
         audio_file: "\(session.audioPath ?? "")"
         system_audio_file: "\(session.systemAudioPath ?? "")"
         preferred_transcript_sources: "\(sourceSummary)"
@@ -82,5 +94,9 @@ struct TranscriptExporter {
         let minutes = (totalSeconds % 3600) / 60
         let seconds = totalSeconds % 60
         return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+    }
+
+    private func transcriptSegmentKey(for segment: TranscriptSegment) -> String {
+        "\(isoTimestamp(segment.absoluteTimestamp)) | +\(relativeTimestamp(segment.relativeOffset))|\(segment.speakerLabel)"
     }
 }

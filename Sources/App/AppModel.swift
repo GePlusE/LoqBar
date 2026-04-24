@@ -19,6 +19,7 @@ final class AppModel: ObservableObject {
     private let captureService: CaptureService
     private let recordingCoordinator: AudioCaptureCoordinator
     private let audioStorageOptimizer: AudioStorageOptimizer
+    private let transcriptRevisionService: TranscriptRevisionService
 
     init(
         permissionsService: PermissionsService = PermissionsService(),
@@ -28,7 +29,8 @@ final class AppModel: ObservableObject {
         transcriptionService: TranscriptionService = TranscriptionService(),
         captureService: CaptureService = CaptureService(),
         recordingCoordinator: AudioCaptureCoordinator = AudioCaptureCoordinator(),
-        audioStorageOptimizer: AudioStorageOptimizer = AudioStorageOptimizer()
+        audioStorageOptimizer: AudioStorageOptimizer = AudioStorageOptimizer(),
+        transcriptRevisionService: TranscriptRevisionService = TranscriptRevisionService()
     ) {
         self.permissionsService = permissionsService
         self.loginItemService = loginItemService
@@ -38,6 +40,7 @@ final class AppModel: ObservableObject {
         self.captureService = captureService
         self.recordingCoordinator = recordingCoordinator
         self.audioStorageOptimizer = audioStorageOptimizer
+        self.transcriptRevisionService = transcriptRevisionService
 
         loadInitialState()
     }
@@ -274,6 +277,54 @@ final class AppModel: ObservableObject {
         guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
         sessions[index].aliasMapping[speakerLabel] = alias.trimmingCharacters(in: .whitespacesAndNewlines)
         persist()
+    }
+
+    func editableTranscriptSegments(for session: SessionRecord) -> [EditableTranscriptSegment] {
+        guard let transcriptPath = session.transcriptPath else { return [] }
+        return transcriptRevisionService.loadEditableSegments(from: transcriptPath, session: session)
+    }
+
+    func updateTranscriptSegment(
+        for sessionID: UUID,
+        segmentKey: String,
+        originalText: String,
+        editedText: String
+    ) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        guard let transcriptPath = sessions[index].transcriptPath else {
+            present(error: .transcriptExportFailed("LoqBar could not find the transcript file to save your manual correction."))
+            return
+        }
+
+        let normalizedOriginal = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEdited = editedText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if normalizedEdited.isEmpty {
+            present(error: .transcriptExportFailed("Manual transcript corrections cannot be empty."))
+            return
+        }
+
+        if normalizedEdited == normalizedOriginal {
+            sessions[index].transcriptEdits.removeValue(forKey: segmentKey)
+        } else {
+            sessions[index].transcriptEdits[segmentKey] = TranscriptEdit(
+                originalText: normalizedOriginal,
+                editedText: normalizedEdited,
+                editedAt: Date()
+            )
+        }
+
+        do {
+            try transcriptRevisionService.applyEdits(
+                to: transcriptPath,
+                edits: sessions[index].transcriptEdits
+            )
+            persist()
+        } catch let error as AppError {
+            present(error: error)
+        } catch {
+            present(error: .transcriptExportFailed("LoqBar could not save the transcript correction: \(error.localizedDescription)"))
+        }
     }
 
     func dismissAlert() {

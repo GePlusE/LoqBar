@@ -16,6 +16,7 @@ struct SessionRecord: Identifiable, Codable, Hashable {
     var language: String
     var speakerCount: Int
     var aliasMapping: [String: String]
+    var transcriptEdits: [String: TranscriptEdit]
     var warningCount: Int
     var notes: String
 
@@ -77,10 +78,17 @@ struct SessionRecord: Identifiable, Codable, Hashable {
             language: Locale.current.language.languageCode?.identifier ?? "en",
             speakerCount: 0,
             aliasMapping: [:],
+            transcriptEdits: [:],
             warningCount: 0,
             notes: ""
         )
     }
+}
+
+struct TranscriptEdit: Codable, Hashable {
+    var originalText: String
+    var editedText: String
+    var editedAt: Date
 }
 
 enum SessionStatus: String, Codable, CaseIterable {

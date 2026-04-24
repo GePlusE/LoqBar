@@ -5,6 +5,8 @@ struct SessionDetailView: View {
     let sessionID: UUID
 
     @State private var editedTitle = ""
+    @State private var editingSegmentKey: String?
+    @State private var segmentDraftText = ""
 
     var body: some View {
         Group {
@@ -115,8 +117,49 @@ struct SessionDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Text(segment.text)
-                            .textSelection(.enabled)
+                        if editingSegmentKey == segment.key {
+                            TextEditor(text: $segmentDraftText)
+                                .frame(minHeight: 72)
+                                .padding(8)
+                                .background(Color.secondary.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                            HStack(spacing: 12) {
+                                Button("Save Correction") {
+                                    appModel.updateTranscriptSegment(
+                                        for: session.id,
+                                        segmentKey: segment.key,
+                                        originalText: segment.originalText,
+                                        editedText: segmentDraftText
+                                    )
+                                    editingSegmentKey = nil
+                                }
+                                .buttonStyle(.borderedProminent)
+
+                                Button("Cancel") {
+                                    editingSegmentKey = nil
+                                    segmentDraftText = ""
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        } else {
+                            Button {
+                                editingSegmentKey = segment.key
+                                segmentDraftText = segment.currentText
+                            } label: {
+                                Text(segment.currentText)
+                                    .foregroundStyle(.primary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .buttonStyle(.plain)
+
+                            if segment.isEdited {
+                                Text(segment.originalText)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
 
                     if segment.id != preview.last?.id {
@@ -174,24 +217,8 @@ struct SessionDetailView: View {
     }
 
     private func transcriptPreview(for session: SessionRecord) -> [TranscriptPreviewSegment] {
-        guard let transcriptPath = session.transcriptPath,
-              let markdown = try? String(contentsOfFile: transcriptPath, encoding: .utf8) else {
-            return []
-        }
-
-        let transcriptSection = markdown
-            .components(separatedBy: "# Transcript")
-            .dropFirst()
-            .joined(separator: "# Transcript")
-            .components(separatedBy: "# Analysis Notes")
-            .first?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        guard !transcriptSection.isEmpty else { return [] }
-
-        return transcriptSection
-            .components(separatedBy: "\n\n")
-            .compactMap(TranscriptPreviewSegment.init(markdownBlock:))
+        appModel.editableTranscriptSegments(for: session)
+            .map(TranscriptPreviewSegment.init(editableSegment:))
     }
 
     private func statusColor(for session: SessionRecord) -> Color {
@@ -215,30 +242,21 @@ struct SessionDetailView: View {
 }
 
 private struct TranscriptPreviewSegment: Identifiable {
-    let id = UUID()
+    let id: String
+    let key: String
     let timestamp: String
     let speakerLabel: String
-    let text: String
+    let originalText: String
+    let currentText: String
+    let isEdited: Bool
 
-    init?(markdownBlock: String) {
-        let trimmed = markdownBlock.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("["),
-              let closingBracketIndex = trimmed.firstIndex(of: "]"),
-              let speakerSeparatorRange = trimmed.range(of: ": ") else {
-            return nil
-        }
-
-        let timestampPart = String(trimmed[..<closingBracketIndex]).trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-        let speakerStart = trimmed.index(after: closingBracketIndex)
-        let speakerPart = trimmed[speakerStart..<speakerSeparatorRange.lowerBound]
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let textPart = trimmed[speakerSeparatorRange.upperBound...]
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !speakerPart.isEmpty, !textPart.isEmpty else { return nil }
-
-        timestamp = timestampPart
-        speakerLabel = speakerPart
-        text = textPart
+    init(editableSegment: EditableTranscriptSegment) {
+        id = editableSegment.id
+        key = editableSegment.key
+        timestamp = editableSegment.timestamp
+        speakerLabel = editableSegment.speakerLabel
+        originalText = editableSegment.originalText
+        currentText = editableSegment.currentText
+        isEdited = editableSegment.isEdited
     }
 }
