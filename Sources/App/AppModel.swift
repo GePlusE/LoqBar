@@ -57,18 +57,11 @@ final class AppModel: ObservableObject {
     }
 
     var menuBarIconName: String {
-        switch activeSession?.status {
-        case .recording:
-            return "waveform.circle.fill"
-        case .processing:
-            return "gearshape.2.fill"
-        case .failed:
-            return "exclamationmark.triangle.fill"
-        case .completed:
-            return "checkmark.circle.fill"
-        case .none, .idle:
-            return "mic.circle"
-        }
+        isRecordingInMenuBar ? "apple.books.pages.fill" : "apple.books.pages"
+    }
+
+    var isRecordingInMenuBar: Bool {
+        activeSession != nil
     }
 
     var transcriptionSetupStatus: TranscriptionSetupStatus {
@@ -242,6 +235,14 @@ final class AppModel: ObservableObject {
             } catch {
                 markSessionFailed(session.id, error: .recordingStopFailed(error.localizedDescription))
             }
+        }
+    }
+
+    func toggleRecordingFromStatusItem() {
+        if activeSession == nil {
+            startRecording()
+        } else {
+            stopRecording()
         }
     }
 

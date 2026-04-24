@@ -3,18 +3,17 @@ import Darwin
 
 @main
 struct LoqBarApp: App {
+    @NSApplicationDelegateAdaptor(LoqBarAppDelegate.self) private var appDelegate
     private let singleInstanceGuard = SingleInstanceGuard()
-    @StateObject private var appModel = AppModel()
+    @StateObject private var appModel: AppModel
+
+    init() {
+        let model = AppModel()
+        _appModel = StateObject(wrappedValue: model)
+        appDelegate.installIfNeeded(appModel: model)
+    }
 
     var body: some Scene {
-        MenuBarExtra {
-            MenuBarView()
-                .environmentObject(appModel)
-        } label: {
-            Label("LoqBar", systemImage: appModel.menuBarIconName)
-        }
-        .menuBarExtraStyle(.window)
-
         Window("LoqBar Settings", id: "settings") {
             SettingsView()
                 .environmentObject(appModel)
@@ -28,6 +27,22 @@ struct LoqBarApp: App {
                 .frame(minWidth: 720, minHeight: 480)
         }
         .defaultSize(width: 720, height: 480)
+    }
+}
+
+final class LoqBarAppDelegate: NSObject, NSApplicationDelegate {
+    private var statusBarController: StatusBarController?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    @MainActor
+    func installIfNeeded(appModel: AppModel) {
+        if statusBarController == nil {
+            statusBarController = StatusBarController(appModel: appModel)
+        }
+        statusBarController?.updateIcon()
     }
 }
 
