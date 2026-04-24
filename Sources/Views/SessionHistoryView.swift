@@ -33,9 +33,14 @@ private struct SessionRow: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(session.title)
                 .font(.headline)
-            Text("\(session.status.title) • \(session.captureMode.title) • \(session.durationSeconds)s")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                statusBadge
+                Text("\(session.captureMode.title) • \(session.durationSeconds)s")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
             if !session.notes.isEmpty {
                 Text(session.notes)
                     .font(.footnote)
@@ -44,5 +49,34 @@ private struct SessionRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private var statusBadge: some View {
+        Text(session.displayStatusTitle)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(statusColor.opacity(0.16))
+            .foregroundStyle(statusColor)
+            .clipShape(Capsule())
+    }
+
+    private var statusColor: Color {
+        if session.isTranscriptionPending {
+            return .orange
+        }
+
+        switch session.status {
+        case .idle:
+            return .secondary
+        case .recording:
+            return .red
+        case .processing:
+            return .blue
+        case .completed:
+            return .green
+        case .failed:
+            return .red
+        }
     }
 }

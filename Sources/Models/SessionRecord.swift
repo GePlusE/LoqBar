@@ -27,6 +27,26 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         audioPath != nil || systemAudioPath != nil
     }
 
+    var isTranscriptionPending: Bool {
+        status == .completed && hasTranscribableAudio && transcriptPath == nil
+    }
+
+    var displayStatusTitle: String {
+        isTranscriptionPending ? "Transcription Pending" : status.title
+    }
+
+    var transcriptionStatusSummary: String {
+        if isTranscriptionPending {
+            return "Recording saved, transcript not exported yet."
+        }
+
+        if transcriptPath != nil {
+            return "Transcript exported."
+        }
+
+        return "No transcript available yet."
+    }
+
     static func newDraft(captureMode: CaptureMode, audioSourceType: AudioSourceType) -> SessionRecord {
         let now = Date()
         return SessionRecord(

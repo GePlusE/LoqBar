@@ -27,7 +27,19 @@ struct SessionDetailView: View {
                         }
                         .disabled(session.isActive || !session.hasTranscribableAudio)
 
-                        LabeledContent("Status", value: session.status.title)
+                        HStack {
+                            Text("Status")
+                            Spacer()
+                            Text(session.displayStatusTitle)
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(statusColor(for: session).opacity(0.16))
+                                .foregroundStyle(statusColor(for: session))
+                                .clipShape(Capsule())
+                        }
+
+                        LabeledContent("Transcription", value: session.transcriptionStatusSummary)
                         LabeledContent("Capture mode", value: session.captureMode.title)
                         LabeledContent("Audio source", value: session.audioSourceType.title)
                         LabeledContent("Microphone audio", value: session.audioPath ?? "Not available")
@@ -49,6 +61,25 @@ struct SessionDetailView: View {
             } else {
                 ContentUnavailableView("Session Not Found", systemImage: "tray")
             }
+        }
+    }
+
+    private func statusColor(for session: SessionRecord) -> Color {
+        if session.isTranscriptionPending {
+            return .orange
+        }
+
+        switch session.status {
+        case .idle:
+            return .secondary
+        case .recording:
+            return .red
+        case .processing:
+            return .blue
+        case .completed:
+            return .green
+        case .failed:
+            return .red
         }
     }
 }
