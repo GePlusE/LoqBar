@@ -265,6 +265,9 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Custom vocabulary")
                     .font(.headline)
+                Text("Add one term per line for names, product names, abbreviations, or jargon Whisper often gets wrong. Example entries: `LoqBar`, `LLM`, `ScreenCaptureKit`, `whisper.cpp`. LoqBar will pass these terms as hints during transcription.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 TextEditor(text: Binding(
                     get: { appModel.settings.customVocabularyEntries.joined(separator: "\n") },
                     set: { appModel.settings.customVocabularyEntries = $0.split(separator: "\n").map(String.init) }

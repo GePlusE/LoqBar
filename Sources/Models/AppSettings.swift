@@ -118,6 +118,8 @@ struct AppSettings: Codable {
 
 enum AudioRetentionPolicy: String, Codable, CaseIterable, Identifiable {
     case deleteImmediately
+    case days7
+    case days14
     case days30
     case days60
     case days90
@@ -129,6 +131,10 @@ enum AudioRetentionPolicy: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .deleteImmediately:
             return "Delete Immediately"
+        case .days7:
+            return "Keep 7 Days"
+        case .days14:
+            return "Keep 14 Days"
         case .days30:
             return "Keep 30 Days"
         case .days60:
