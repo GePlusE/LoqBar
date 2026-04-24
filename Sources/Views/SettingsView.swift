@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 private enum SettingsLanguage: String, CaseIterable, Identifiable {
     case auto
@@ -217,6 +218,8 @@ struct SettingsView: View {
 
     private var transcriptionPane: some View {
         VStack(alignment: .leading, spacing: 18) {
+            transcriptionStatusCard
+
             settingsField("Model identifier") {
                 TextField("Local model identifier", text: $appModel.settings.transcriptionModelIdentifier)
                     .textFieldStyle(.roundedBorder)
@@ -243,6 +246,22 @@ struct SettingsView: View {
                 \(appModel.settings.managedTranscriptionRootFolder)
                 """
             )
+
+            HStack(spacing: 12) {
+                Button("Install Managed Copy") {
+                    appModel.installManagedTranscriptionFiles()
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("Clear External Paths") {
+                    appModel.clearExternalTranscriptionPaths()
+                }
+                .buttonStyle(.bordered)
+                .disabled(
+                    appModel.settings.transcriptionExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                    appModel.settings.transcriptionModelPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+            }
 
             settingsField("Optional external whisper-cli path") {
                 pathField(
@@ -285,6 +304,40 @@ struct SettingsView: View {
         }
     }
 
+    private var transcriptionStatusCard: some View {
+        let status = appModel.transcriptionSetupStatus
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Text(status.title)
+                    .font(.headline)
+
+                Text(statusBadgeText(for: status))
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(statusColor(for: status).opacity(0.16))
+                    .foregroundStyle(statusColor(for: status))
+                    .clipShape(Capsule())
+            }
+
+            Text(status.message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            ForEach(status.detailLines, id: \.self) { line in
+                Text(line)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
     private func settingsField<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
@@ -312,6 +365,28 @@ struct SettingsView: View {
         Text(text)
             .font(.footnote)
             .foregroundStyle(.secondary)
+    }
+
+    private func statusColor(for status: TranscriptionSetupStatus) -> Color {
+        switch status.badgeColorName {
+        case "green":
+            return .green
+        case "red":
+            return .red
+        default:
+            return .orange
+        }
+    }
+
+    private func statusBadgeText(for status: TranscriptionSetupStatus) -> String {
+        switch status.state {
+        case .readyExternal, .readyManaged:
+            return "Ready"
+        case .brokenExternal:
+            return "Broken"
+        case .notConfigured, .incompleteExternal:
+            return "Setup Needed"
+        }
     }
 
     private func pathField(

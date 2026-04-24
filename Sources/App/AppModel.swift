@@ -65,6 +65,10 @@ final class AppModel: ObservableObject {
         }
     }
 
+    var transcriptionSetupStatus: TranscriptionSetupStatus {
+        TranscriptionSetupStatus.from(settings: settings)
+    }
+
     func loadInitialState() {
         settings = sessionStore.loadSettings()
         sessions = sessionStore.loadSessions()
@@ -423,6 +427,46 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func clearExternalTranscriptionPaths() {
+        settings.transcriptionExecutablePath = ""
+        settings.transcriptionModelPath = ""
+        persist()
+    }
+
+    func installManagedTranscriptionFiles() {
+        do {
+            let source = try resolveManagedTranscriptionInstallSource()
+            let fileManager = FileManager.default
+
+            let executableURL = URL(fileURLWithPath: settings.managedTranscriptionExecutablePath)
+            let modelURL = URL(fileURLWithPath: settings.managedTranscriptionModelPath)
+
+            try fileManager.createDirectory(at: executableURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: modelURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+            if fileManager.fileExists(atPath: executableURL.path) {
+                try fileManager.removeItem(at: executableURL)
+            }
+            if fileManager.fileExists(atPath: modelURL.path) {
+                try fileManager.removeItem(at: modelURL)
+            }
+
+            try fileManager.copyItem(at: source.executableURL, to: executableURL)
+            try fileManager.copyItem(at: source.modelURL, to: modelURL)
+
+            var permissions = stat()
+            if stat(executableURL.path, &permissions) == 0 {
+                chmod(executableURL.path, permissions.st_mode | S_IXUSR | S_IXGRP | S_IXOTH)
+            }
+
+            persist()
+        } catch let error as AppError {
+            present(error: error)
+        } catch {
+            present(error: .storageSetupFailed("LoqBar could not install the managed transcription files: \(error.localizedDescription)"))
+        }
+    }
+
     func persist() {
         sessionStore.save(settings: settings)
         sessionStore.save(sessions: sessions)
@@ -432,6 +476,45 @@ final class AppModel: ObservableObject {
         alertContext = AlertContext(
             title: error.title,
             message: error.recoverySuggestion
+        )
+    }
+
+    private func resolveManagedTranscriptionInstallSource() throws -> (executableURL: URL, modelURL: URL) {
+        let fileManager = FileManager.default
+
+        let externalExecutable = settings.transcriptionExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let externalModel = settings.transcriptionModelPath.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !externalExecutable.isEmpty,
+           !externalModel.isEmpty,
+           fileManager.isExecutableFile(atPath: externalExecutable),
+           fileManager.fileExists(atPath: externalModel) {
+            return (
+                executableURL: URL(fileURLWithPath: externalExecutable),
+                modelURL: URL(fileURLWithPath: externalModel)
+            )
+        }
+
+        let workspaceRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let bundledExecutable = workspaceRoot
+            .appendingPathComponent("tools", isDirectory: true)
+            .appendingPathComponent("whisper.cpp", isDirectory: true)
+            .appendingPathComponent("build", isDirectory: true)
+            .appendingPathComponent("bin", isDirectory: true)
+            .appendingPathComponent("whisper-cli")
+        let bundledModel = workspaceRoot
+            .appendingPathComponent("tools", isDirectory: true)
+            .appendingPathComponent("whisper.cpp", isDirectory: true)
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent("ggml-base.bin")
+
+        if fileManager.isExecutableFile(atPath: bundledExecutable.path),
+           fileManager.fileExists(atPath: bundledModel.path) {
+            return (executableURL: bundledExecutable, modelURL: bundledModel)
+        }
+
+        throw AppError.transcriptionConfigurationMissing(
+            "LoqBar could not find a usable whisper-cli and model pair to install. Choose working external files first, or provide a managed source in the developer workspace."
         )
     }
 
