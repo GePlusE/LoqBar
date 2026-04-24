@@ -146,6 +146,7 @@ struct TranscriptionService {
                     absoluteTimestamp: sessionStart.addingTimeInterval(segment.startTime),
                     relativeOffset: segment.startTime,
                     speakerLabel: speakerLabel,
+                    source: source.rawValue,
                     text: segment.text,
                     lowConfidence: false
                 )

@@ -13,6 +13,7 @@ struct TranscriptSegment {
     let absoluteTimestamp: Date
     let relativeOffset: TimeInterval
     let speakerLabel: String
+    let source: String
     let text: String
     let lowConfidence: Bool
 }

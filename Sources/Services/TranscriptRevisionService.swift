@@ -11,6 +11,11 @@ struct EditableTranscriptSegment: Identifiable, Hashable {
     var isEdited: Bool { currentText != originalText }
 }
 
+private struct AgentSegmentMetadata {
+    let id: String
+    let source: String
+}
+
 struct TranscriptRevisionService {
     func loadEditableSegments(from transcriptPath: String, session: SessionRecord) -> [EditableTranscriptSegment] {
         guard let markdown = try? String(contentsOfFile: transcriptPath, encoding: .utf8) else {
@@ -58,6 +63,7 @@ struct TranscriptRevisionService {
         aliasMapping: [String: String]
     ) throws -> String {
         let transcriptMarker = "# Transcript"
+        let agentMarker = "# Agent Segments"
         let analysisMarker = "# Analysis Notes"
 
         guard let transcriptRange = markdown.range(of: transcriptMarker) else {
@@ -65,21 +71,32 @@ struct TranscriptRevisionService {
         }
 
         let afterTranscript = markdown[transcriptRange.upperBound...]
-        let analysisRangeInTail = afterTranscript.range(of: analysisMarker)
+        let agentRangeInTail = afterTranscript.range(of: agentMarker)
 
         let header = String(markdown[..<transcriptRange.upperBound])
-        let analysisSuffix: String
         let transcriptBodyRaw: String
+        let agentBodyRaw: String
+        let analysisSuffix: String
 
-        if let analysisRangeInTail {
-            transcriptBodyRaw = String(afterTranscript[..<analysisRangeInTail.lowerBound])
-            analysisSuffix = String(afterTranscript[analysisRangeInTail.lowerBound...])
+        if let agentRangeInTail {
+            transcriptBodyRaw = String(afterTranscript[..<agentRangeInTail.lowerBound])
+            let afterAgent = afterTranscript[agentRangeInTail.upperBound...]
+
+            if let analysisRangeAfterAgent = afterAgent.range(of: analysisMarker) {
+                agentBodyRaw = String(afterAgent[..<analysisRangeAfterAgent.lowerBound])
+                analysisSuffix = String(afterAgent[analysisRangeAfterAgent.lowerBound...])
+            } else {
+                agentBodyRaw = String(afterAgent)
+                analysisSuffix = ""
+            }
         } else {
             transcriptBodyRaw = String(afterTranscript)
+            agentBodyRaw = ""
             analysisSuffix = ""
         }
 
         let segments = parseTranscriptSection(from: transcriptMarker + transcriptBodyRaw)
+        let agentMetadata = parseAgentSegmentMetadata(from: agentBodyRaw)
         let rebuiltBody = segments.map { segment in
             let activeEdit = edits[segment.key]
             let currentText = activeEdit?.editedText ?? baseTranscriptText(for: segment)
@@ -97,6 +114,26 @@ struct TranscriptRevisionService {
 
             return lines.joined(separator: "\n")
         }.joined(separator: "\n\n")
+        let rebuiltAgentBody = segments.enumerated().map { index, segment in
+            let activeEdit = edits[segment.key]
+            let currentText = activeEdit?.editedText ?? baseTranscriptText(for: segment)
+            let originalText = activeEdit?.originalText ?? segment.originalText
+            let speakerDisplay = displaySpeakerName(for: segment.speakerLabel, aliasMapping: aliasMapping)
+            let metadata = agentMetadata[segment.key]
+            let segmentID = metadata?.id ?? String(format: "seg-%04d", index + 1)
+            let source = metadata?.source ?? "unknown"
+
+            return """
+            - id: "\(segmentID)"
+              marker: "\(escapeForYAML(segment.timestamp))"
+              speaker_label: "\(escapeForYAML(segment.speakerLabel))"
+              speaker_name: "\(escapeForYAML(speakerDisplay))"
+              source: "\(escapeForYAML(source))"
+              edited: \(currentText != originalText)
+              text: "\(escapeForYAML(currentText))"
+              original_text: "\(escapeForYAML(originalText))"
+            """
+        }.joined(separator: "\n")
 
         let normalizedHeader = header.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedAnalysis = analysisSuffix.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -104,10 +141,10 @@ struct TranscriptRevisionService {
         let updatedHeader = rewriteSpeakerAliases(in: normalizedHeader, aliasMapping: aliasMapping)
 
         if normalizedAnalysis.isEmpty {
-            return "\(updatedHeader)\n\n\(rebuiltBody)\n"
+            return "\(updatedHeader)\n\n\(rebuiltBody)\n\n# Agent Segments\n\n\(rebuiltAgentBody)\n"
         }
 
-        return "\(updatedHeader)\n\n\(rebuiltBody)\n\n\(normalizedAnalysis)\n"
+        return "\(updatedHeader)\n\n\(rebuiltBody)\n\n# Agent Segments\n\n\(rebuiltAgentBody)\n\n\(normalizedAnalysis)\n"
     }
 
     private func parseTranscriptSection(from markdown: String) -> [EditableTranscriptSegment] {
@@ -115,6 +152,8 @@ struct TranscriptRevisionService {
             .components(separatedBy: "# Transcript")
             .dropFirst()
             .joined(separator: "# Transcript")
+            .components(separatedBy: "# Agent Segments")
+            .first?
             .components(separatedBy: "# Analysis Notes")
             .first?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -175,6 +214,47 @@ struct TranscriptRevisionService {
         )
     }
 
+    private func parseAgentSegmentMetadata(from markdown: String) -> [String: AgentSegmentMetadata] {
+        let lines = markdown
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var metadata: [String: AgentSegmentMetadata] = [:]
+        var currentID = ""
+        var currentMarker = ""
+        var currentSpeakerLabel = ""
+        var currentSource = "unknown"
+
+        func commitCurrent() {
+            guard !currentMarker.isEmpty, !currentSpeakerLabel.isEmpty else { return }
+            let key = segmentKey(timestamp: currentMarker, speakerLabel: currentSpeakerLabel)
+            metadata[key] = AgentSegmentMetadata(
+                id: currentID.isEmpty ? "seg-\(metadata.count + 1)" : currentID,
+                source: currentSource
+            )
+        }
+
+        for line in lines {
+            if line.hasPrefix("- id: ") {
+                commitCurrent()
+                currentID = cleanedValue(from: line, prefix: "- id: ")
+                currentMarker = ""
+                currentSpeakerLabel = ""
+                currentSource = "unknown"
+            } else if line.hasPrefix("marker: ") {
+                currentMarker = cleanedValue(from: line, prefix: "marker: ")
+            } else if line.hasPrefix("speaker_label: ") {
+                currentSpeakerLabel = cleanedValue(from: line, prefix: "speaker_label: ")
+            } else if line.hasPrefix("source: ") {
+                currentSource = cleanedValue(from: line, prefix: "source: ")
+            }
+        }
+
+        commitCurrent()
+        return metadata
+    }
+
     private func displaySpeakerName(for speakerLabel: String, aliasMapping: [String: String]) -> String {
         let alias = aliasMapping[speakerLabel]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return alias.isEmpty ? speakerLabel : alias
@@ -222,5 +302,13 @@ struct TranscriptRevisionService {
 
     private func baseTranscriptText(for segment: EditableTranscriptSegment) -> String {
         segment.isEdited ? segment.originalText : segment.currentText
+    }
+
+    private func cleanedValue(from line: String, prefix: String) -> String {
+        line
+            .replacingOccurrences(of: prefix, with: "")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            .replacingOccurrences(of: "\\\"", with: "\"")
+            .replacingOccurrences(of: "\\\\", with: "\\")
     }
 }
