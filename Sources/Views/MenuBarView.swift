@@ -10,7 +10,9 @@ struct MenuBarView: View {
             header
             controls
             modePicker
-            sessionStatus
+            if shouldShowPermissionBadges {
+                permissionBadges
+            }
             quickActions
         }
         .padding(18)
@@ -30,48 +32,24 @@ struct MenuBarView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack {
             Text("LoqBar")
                 .font(.title2.weight(.semibold))
 
             Spacer()
-
-            Text(statusTitle)
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.secondary.opacity(0.12))
-                .clipShape(Capsule())
         }
     }
 
     private var modePicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Mode")
-                .font(.headline)
-
-            Picker("Mode", selection: $appModel.settings.defaultCaptureMode) {
-                ForEach(CaptureMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: appModel.settings.defaultCaptureMode) { _, _ in
-                appModel.persist()
+        Picker("Default Capture Mode", selection: $appModel.settings.defaultCaptureMode) {
+            ForEach(CaptureMode.allCases) { mode in
+                Text(mode.title).tag(mode)
             }
         }
-    }
-
-    private var sessionStatus: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Session", systemImage: appModel.menuBarIconName)
-                .font(.headline)
-
-            Text(statusSubtitle)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            permissionBadges
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .onChange(of: appModel.settings.defaultCaptureMode) { _, _ in
+            appModel.persist()
         }
     }
 
@@ -168,17 +146,6 @@ struct MenuBarView: View {
                 .disabled(appModel.activeSession != nil)
             }
 
-            if appModel.firstRunState.needsOnboarding {
-                Divider()
-
-                NavigationLink {
-                    FirstRunSetupView()
-                        .environmentObject(appModel)
-                } label: {
-                    Text("Finish Setup")
-                }
-            }
-
             Divider()
 
             Button("Quit LoqBar") {
@@ -188,15 +155,7 @@ struct MenuBarView: View {
         .buttonStyle(.plain)
     }
 
-    private var statusTitle: String {
-        appModel.activeSession?.status.title ?? "Idle"
-    }
-
-    private var statusSubtitle: String {
-        if let activeSession = appModel.activeSession {
-            return activeSession.notes.isEmpty ? "Session in progress" : activeSession.notes
-        }
-
-        return appModel.processingMessage
+    private var shouldShowPermissionBadges: Bool {
+        !appModel.permissionState.microphoneAuthorized || !appModel.permissionState.screenCaptureAuthorized
     }
 }
