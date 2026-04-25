@@ -472,7 +472,7 @@ final class AppModel: ObservableObject {
 
         if let matchingWindow {
             matchingWindow.collectionBehavior.insert(.moveToActiveSpace)
-            matchingWindow.level = .floating
+            matchingWindow.level = .normal
             matchingWindow.orderFrontRegardless()
             matchingWindow.makeKeyAndOrderFront(nil)
             matchingWindow.orderFront(nil)
