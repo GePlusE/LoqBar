@@ -26,7 +26,7 @@ struct AppReleaseFeedConfiguration {
             return AppReleaseFeedConfiguration(feedURL: envFeedURL, releasePageURL: envReleasePageURL)
         }
 
-        let localFallback = localDevelopmentFallback()
+        let localFallback = LocalDevelopmentReleaseConfiguration.load()
         if localFallback.feedURL != nil || localFallback.releasePageURL != nil {
             return AppReleaseFeedConfiguration(feedURL: localFallback.feedURL, releasePageURL: localFallback.releasePageURL)
         }
@@ -36,48 +36,6 @@ struct AppReleaseFeedConfiguration {
             releasePageURL: defaultGitHubReleasePageURL
         )
     }
-
-    private static func localDevelopmentFallback() -> (feedURL: URL?, releasePageURL: URL?) {
-        let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-        let candidateFiles = [
-            currentDirectory.appendingPathComponent("Packaging/release.env"),
-            currentDirectory.appendingPathComponent("Packaging/release.env.local")
-        ]
-
-        for candidate in candidateFiles {
-            guard let content = try? String(contentsOf: candidate, encoding: .utf8) else { continue }
-            let values = parseShellExports(from: content)
-            let feedURL = values["RELEASE_FEED_URL"].flatMap(normalizedURL)
-            let releasePageURL = values["RELEASE_PAGE_URL"].flatMap(normalizedURL)
-
-            if feedURL != nil || releasePageURL != nil {
-                return (feedURL, releasePageURL)
-            }
-        }
-
-        return (nil, nil)
-    }
-
-    private static func parseShellExports(from content: String) -> [String: String] {
-        content
-            .split(whereSeparator: \.isNewline)
-            .reduce(into: [:]) { result, rawLine in
-                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard line.hasPrefix("export ") else { return }
-
-                let declaration = String(line.dropFirst("export ".count))
-                let parts = declaration.split(separator: "=", maxSplits: 1).map(String.init)
-                guard parts.count == 2 else { return }
-
-                let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
-                let value = parts[1]
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-
-                result[key] = value
-            }
-    }
-
     private static func normalizedURL(_ rawValue: String) -> URL? {
         rawValue
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -92,13 +50,35 @@ struct AppVersion: Equatable {
 
     static func current() -> AppVersion {
         let info = Bundle.main.infoDictionary ?? [:]
-        let marketingVersion = (info["CFBundleShortVersionString"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty ?? "Development Build"
-        let buildNumber = (info["CFBundleVersion"] as? String)?
+        let bundleMarketingVersion = (info["CFBundleShortVersionString"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .nilIfEmpty
-        return AppVersion(marketingVersion: marketingVersion, buildNumber: buildNumber)
+        let bundleBuildNumber = (info["CFBundleVersion"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+
+        if let bundleMarketingVersion {
+            return AppVersion(marketingVersion: bundleMarketingVersion, buildNumber: bundleBuildNumber)
+        }
+
+        let environment = ProcessInfo.processInfo.environment
+        let envMarketingVersion = environment["MARKETING_VERSION"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+        let envBuildNumber = environment["BUILD_NUMBER"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+
+        if let envMarketingVersion {
+            return AppVersion(marketingVersion: envMarketingVersion, buildNumber: envBuildNumber)
+        }
+
+        let localFallback = LocalDevelopmentReleaseConfiguration.load()
+        if let localMarketingVersion = localFallback.marketingVersion {
+            return AppVersion(marketingVersion: localMarketingVersion, buildNumber: localFallback.buildNumber)
+        }
+
+        return AppVersion(marketingVersion: "Development Build", buildNumber: nil)
     }
 
     var displayString: String {
@@ -123,6 +103,56 @@ struct AppVersion: Equatable {
         guard let buildNumber else { return false }
         guard let otherBuildNumber = other.buildNumber else { return false }
         return buildNumber.compare(otherBuildNumber, options: [.numeric]) == .orderedAscending
+    }
+}
+
+private struct LocalDevelopmentReleaseConfiguration {
+    let marketingVersion: String?
+    let buildNumber: String?
+    let feedURL: URL?
+    let releasePageURL: URL?
+
+    static func load() -> LocalDevelopmentReleaseConfiguration {
+        let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let candidateFiles = [
+            currentDirectory.appendingPathComponent("Packaging/release.env"),
+            currentDirectory.appendingPathComponent("Packaging/release.env.local"),
+            currentDirectory.appendingPathComponent("Packaging/release.env.example")
+        ]
+
+        for candidate in candidateFiles {
+            guard let content = try? String(contentsOf: candidate, encoding: .utf8) else { continue }
+            let values = parseShellExports(from: content)
+
+            return LocalDevelopmentReleaseConfiguration(
+                marketingVersion: values["MARKETING_VERSION"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                buildNumber: values["BUILD_NUMBER"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                feedURL: values["RELEASE_FEED_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty.flatMap(URL.init(string:)),
+                releasePageURL: values["RELEASE_PAGE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty.flatMap(URL.init(string:))
+            )
+        }
+
+        return LocalDevelopmentReleaseConfiguration(marketingVersion: nil, buildNumber: nil, feedURL: nil, releasePageURL: nil)
+    }
+
+    private static func parseShellExports(from content: String) -> [String: String] {
+        content
+            .split(whereSeparator: \.isNewline)
+            .reduce(into: [:]) { result, rawLine in
+                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard line.hasPrefix("export ") else { return }
+
+                let declaration = String(line.dropFirst("export ".count))
+                let parts = declaration.split(separator: "=", maxSplits: 1).map(String.init)
+                guard parts.count == 2 else { return }
+
+                let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                let value = parts[1]
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+
+                result[key] = value
+            }
     }
 }
 
