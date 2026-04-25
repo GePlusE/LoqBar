@@ -11,6 +11,7 @@ final class AppModel: ObservableObject {
     @Published var firstRunState = FirstRunState()
     @Published var alertContext: AlertContext?
     @Published var processingMessage = "Ready"
+    @Published var updateStatus = UpdateStatusSummary.idle
 
     private let permissionsService: PermissionsService
     private let loginItemService: LoginItemService
@@ -22,6 +23,7 @@ final class AppModel: ObservableObject {
     private let audioStorageOptimizer: AudioStorageOptimizer
     private let transcriptRevisionService: TranscriptRevisionService
     private let retentionCleanupService: RetentionCleanupService
+    private let updateCheckService: UpdateCheckService
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -34,7 +36,8 @@ final class AppModel: ObservableObject {
         recordingCoordinator: AudioCaptureCoordinator = AudioCaptureCoordinator(),
         audioStorageOptimizer: AudioStorageOptimizer = AudioStorageOptimizer(),
         transcriptRevisionService: TranscriptRevisionService = TranscriptRevisionService(),
-        retentionCleanupService: RetentionCleanupService = RetentionCleanupService()
+        retentionCleanupService: RetentionCleanupService = RetentionCleanupService(),
+        updateCheckService: UpdateCheckService = UpdateCheckService()
     ) {
         self.permissionsService = permissionsService
         self.loginItemService = loginItemService
@@ -46,6 +49,7 @@ final class AppModel: ObservableObject {
         self.audioStorageOptimizer = audioStorageOptimizer
         self.transcriptRevisionService = transcriptRevisionService
         self.retentionCleanupService = retentionCleanupService
+        self.updateCheckService = updateCheckService
         self.recordingCoordinator.onCaptureInterrupted = { [weak self] reason in
             Task { @MainActor in
                 self?.handleCaptureInterruption(reason)
@@ -74,6 +78,22 @@ final class AppModel: ObservableObject {
 
     var transcriptionSetupStatus: TranscriptionSetupStatus {
         TranscriptionSetupStatus.from(settings: settings)
+    }
+
+    var currentAppVersionDisplay: String {
+        AppVersion.current().displayString
+    }
+
+    var updateFeedConfiguration: AppReleaseFeedConfiguration {
+        AppReleaseFeedConfiguration.fromMainBundle()
+    }
+
+    var updateSourceSummary: String {
+        if let feedURL = updateFeedConfiguration.feedURL {
+            return feedURL.absoluteString
+        }
+
+        return "No release feed is configured in this build yet."
     }
 
     func loadInitialState() {
@@ -563,6 +583,25 @@ final class AppModel: ObservableObject {
         runRetentionCleanup(markRunTimestamp: true)
     }
 
+    func checkForUpdates() {
+        guard updateStatus != .checking else { return }
+
+        updateStatus = .checking
+        let currentVersion = AppVersion.current()
+        let configuration = AppReleaseFeedConfiguration.fromMainBundle()
+
+        Task {
+            let result = await updateCheckService.checkForUpdates(
+                currentVersion: currentVersion,
+                configuration: configuration
+            )
+
+            await MainActor.run {
+                handleUpdateCheckResult(result)
+            }
+        }
+    }
+
     func installManagedTranscriptionFiles() {
         do {
             let source = try resolveManagedTranscriptionInstallSource()
@@ -737,6 +776,68 @@ final class AppModel: ObservableObject {
         }
 
         persist()
+    }
+
+    private func handleUpdateCheckResult(_ result: UpdateCheckResult) {
+        let now = Date()
+
+        switch result {
+        case let .updateAvailable(release):
+            updateStatus = .updateAvailable(version: release.version.displayString, checkedAt: now)
+
+            let alert = NSAlert()
+            alert.messageText = "Update Available"
+            alert.informativeText = [
+                "LoqBar \(release.version.displayString) is available.",
+                release.notes?.trimmingCharacters(in: .whitespacesAndNewlines).prefix(220).description
+            ]
+            .compactMap { $0?.nilIfEmpty }
+            .joined(separator: "\n\n")
+            alert.addButton(withTitle: release.primaryActionURL == nil ? "OK" : "Open Release")
+            if release.primaryActionURL != nil {
+                alert.addButton(withTitle: "Later")
+            }
+
+            prepareToPresentAuxiliaryWindow()
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn, let url = release.primaryActionURL {
+                NSWorkspace.shared.open(url)
+            }
+
+        case .upToDate:
+            updateStatus = .upToDate(checkedAt: now)
+            presentInformationalAlert(
+                title: "LoqBar Is Up to Date",
+                message: "You already have the latest available release for this build channel."
+            )
+
+        case .notConfigured:
+            updateStatus = .notConfigured
+            presentInformationalAlert(
+                title: "Updates Not Configured",
+                message: """
+                This build does not include a release feed yet. Add a GitHub Releases API URL or release manifest URL during packaging to enable manual update checks.
+
+                Current build: \(currentAppVersionDisplay)
+                """
+            )
+
+        case let .failed(message):
+            updateStatus = .failed(message: message)
+            presentInformationalAlert(
+                title: "Update Check Failed",
+                message: message
+            )
+        }
+    }
+
+    private func presentInformationalAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        prepareToPresentAuxiliaryWindow()
+        alert.runModal()
     }
 
     private func observeWorkspaceLifecycle() {

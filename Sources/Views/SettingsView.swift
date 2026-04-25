@@ -139,6 +139,21 @@ struct SettingsView: View {
             }
 
             infoCard(
+                title: "Updates",
+                body: """
+                Current version: \(appModel.currentAppVersionDisplay)
+                Status: \(appModel.updateStatus.title)
+                Release feed: \(appModel.updateSourceSummary)
+                """
+            )
+
+            Button(appModel.updateStatus == .checking ? "Checking…" : "Check for Updates") {
+                appModel.checkForUpdates()
+            }
+            .buttonStyle(.bordered)
+            .disabled(appModel.updateStatus == .checking)
+
+            infoCard(
                 title: "Permissions",
                 body: "Refresh LoqBar's permission state after changing microphone or screen recording access in System Settings."
             )

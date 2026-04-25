@@ -58,8 +58,37 @@ Optional overrides:
 BUNDLE_ID="com.yourcompany.loqbar" \
 MARKETING_VERSION="0.1.0" \
 BUILD_NUMBER="42" \
+RELEASE_FEED_URL="https://api.github.com/repos/OWNER/REPO/releases/latest" \
+RELEASE_PAGE_URL="https://github.com/OWNER/REPO/releases" \
 ./Packaging/build-app.sh
 ```
+
+## Manual update checks
+
+LoqBar can show a lightweight `Check for Updates` flow in `Preferences > General`.
+
+The packaged app reads its update source from the app bundle metadata:
+
+- `LoqBarReleaseFeedURL`
+- `LoqBarReleasePageURL`
+
+`build-app.sh` fills those from:
+
+- `RELEASE_FEED_URL`
+- `RELEASE_PAGE_URL`
+
+Supported feed formats:
+
+- GitHub latest release API:
+  - `https://api.github.com/repos/OWNER/REPO/releases/latest`
+- a custom JSON manifest with fields like:
+  - `version`
+  - `build`
+  - `title`
+  - `download_url`
+  - `release_page_url`
+  - `published_at`
+  - `notes`
 
 ## Validate the bundle
 

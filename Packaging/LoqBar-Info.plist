@@ -16,6 +16,10 @@
     <string>LoqBar</string>
     <key>CFBundleDisplayName</key>
     <string>LoqBar</string>
+    <key>LoqBarReleaseFeedURL</key>
+    <string></string>
+    <key>LoqBarReleasePageURL</key>
+    <string></string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
