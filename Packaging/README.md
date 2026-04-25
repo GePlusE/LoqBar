@@ -52,9 +52,7 @@ BUILD_NUMBER="42" \
 ## Validate the bundle
 
 ```bash
-codesign --verify --deep --strict dist/LoqBar.app
-spctl --assess --type execute dist/LoqBar.app
-unzip -l dist/LoqBar.zip
+./Packaging/validate-release.sh
 ```
 
 ## Notarization later
@@ -62,10 +60,10 @@ unzip -l dist/LoqBar.zip
 Once the app is signed with a real Developer ID identity, the next step is notarization:
 
 ```bash
-ditto -c -k --keepParent dist/LoqBar.app dist/LoqBar.zip
-xcrun notarytool submit dist/LoqBar.zip --wait --keychain-profile "YOUR_PROFILE"
-xcrun stapler staple dist/LoqBar.app
+KEYCHAIN_PROFILE="YOUR_PROFILE" ./Packaging/notarize-app.sh
 ```
+
+A fuller release flow is documented in [Packaging/RELEASE_CHECKLIST.md](/Users/gepluse/Coding/LoqBar/Packaging/RELEASE_CHECKLIST.md).
 
 ## Still missing
 

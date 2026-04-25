@@ -10,6 +10,7 @@ export DEVELOPER_DIR
 export HOME="$BUILD_HOME"
 export CLANG_MODULE_CACHE_PATH="$BUILD_HOME/clang-module-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$BUILD_HOME/swiftpm-module-cache"
+export COPYFILE_DISABLE=1
 
 APP_NAME="LoqBar"
 BUNDLE_ID="${BUNDLE_ID:-com.loqbar.app}"
@@ -69,7 +70,7 @@ echo "Codesigning with identity: $SIGNING_IDENTITY"
 codesign --force --deep --timestamp=none --entitlements "$ENTITLEMENTS_FILE" --sign "$SIGNING_IDENTITY" "$APP_BUNDLE"
 
 echo "Creating distributable ZIP..."
-ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
+ditto --norsrc -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"
 
 echo
 echo "Built app bundle:"
