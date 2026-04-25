@@ -5,6 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_BUNDLE="${APP_BUNDLE:-$ROOT_DIR/dist/LoqBar.app}"
 ZIP_PATH="${ZIP_PATH:-$ROOT_DIR/dist/LoqBar.zip}"
+DMG_PATH="${DMG_PATH:-$ROOT_DIR/dist/LoqBar.dmg}"
 KEYCHAIN_PROFILE="${KEYCHAIN_PROFILE:-}"
 
 if [[ -z "$KEYCHAIN_PROFILE" ]]; then
@@ -30,9 +31,20 @@ xcrun notarytool submit "$ZIP_PATH" --keychain-profile "$KEYCHAIN_PROFILE" --wai
 echo "Stapling notarization ticket..."
 xcrun stapler staple "$APP_BUNDLE"
 
+if [[ -f "$DMG_PATH" ]]; then
+  echo "Submitting DMG for notarization..."
+  xcrun notarytool submit "$DMG_PATH" --keychain-profile "$KEYCHAIN_PROFILE" --wait
+
+  echo "Stapling notarization ticket to DMG..."
+  xcrun stapler staple "$DMG_PATH"
+fi
+
 echo "Re-validating stapled app..."
 spctl --assess --type execute "$APP_BUNDLE"
 
 echo
 echo "Notarization complete:"
 echo "  $APP_BUNDLE"
+if [[ -f "$DMG_PATH" ]]; then
+  echo "  $DMG_PATH"
+fi

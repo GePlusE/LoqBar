@@ -67,11 +67,25 @@ BUILD_NUMBER="42" \
 ./Packaging/validate-release.sh
 ```
 
+## Check distribution readiness
+
+```bash
+source ./Packaging/release.env.example
+./Packaging/check-distribution-readiness.sh
+```
+
 ## Create a DMG
 
 ```bash
 ./Packaging/create-dmg.sh
 ```
+
+By default, `create-dmg.sh` also tries to apply a Finder layout so the mounted installer shows:
+
+- `LoqBar.app`
+- `Applications`
+
+in a cleaner drag-to-install arrangement.
 
 ## Notarization later
 
@@ -87,7 +101,7 @@ A fuller release flow is documented in [Packaging/RELEASE_CHECKLIST.md](/Users/g
 
 This packaging layer does **not** yet provide:
 
-- a styled/custom DMG layout
+- a custom DMG background image by default
 - Sparkle or another updater
 - a login-item helper target
 - automated notarization in CI

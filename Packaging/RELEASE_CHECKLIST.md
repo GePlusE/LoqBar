@@ -11,6 +11,13 @@ Expected outputs:
 - `dist/LoqBar.app`
 - `dist/LoqBar.zip`
 
+## Check credentials and signing state
+
+```bash
+source ./Packaging/release.env.example
+./Packaging/check-distribution-readiness.sh
+```
+
 ## Create installer DMG
 
 ```bash
@@ -57,6 +64,6 @@ KEYCHAIN_PROFILE="LoqBarNotary" ./Packaging/notarize-app.sh
 
 ## Optional next steps
 
-- styled DMG background/layout
+- custom DMG background artwork
 - CI automation for build/sign/notarize
 - updater integration
