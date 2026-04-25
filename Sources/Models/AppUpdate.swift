@@ -4,6 +4,9 @@ struct AppReleaseFeedConfiguration {
     let feedURL: URL?
     let releasePageURL: URL?
 
+    private static let defaultGitHubReleaseFeedURL = URL(string: "https://api.github.com/repos/GePlusE/LoqBar/releases/latest")
+    private static let defaultGitHubReleasePageURL = URL(string: "https://github.com/GePlusE/LoqBar/releases")
+
     static func fromMainBundle() -> AppReleaseFeedConfiguration {
         let info = Bundle.main.infoDictionary ?? [:]
         let bundleFeedURL = (info["LoqBarReleaseFeedURL"] as? String)
@@ -24,7 +27,14 @@ struct AppReleaseFeedConfiguration {
         }
 
         let localFallback = localDevelopmentFallback()
-        return AppReleaseFeedConfiguration(feedURL: localFallback.feedURL, releasePageURL: localFallback.releasePageURL)
+        if localFallback.feedURL != nil || localFallback.releasePageURL != nil {
+            return AppReleaseFeedConfiguration(feedURL: localFallback.feedURL, releasePageURL: localFallback.releasePageURL)
+        }
+
+        return AppReleaseFeedConfiguration(
+            feedURL: defaultGitHubReleaseFeedURL,
+            releasePageURL: defaultGitHubReleasePageURL
+        )
     }
 
     private static func localDevelopmentFallback() -> (feedURL: URL?, releasePageURL: URL?) {

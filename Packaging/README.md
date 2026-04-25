@@ -77,6 +77,10 @@ The packaged app reads its update source from the app bundle metadata:
 - `RELEASE_FEED_URL`
 - `RELEASE_PAGE_URL`
 
+By default, LoqBar uses the GitHub Releases endpoints for:
+
+- `GePlusE/LoqBar`
+
 Supported feed formats:
 
 - GitHub latest release API:
