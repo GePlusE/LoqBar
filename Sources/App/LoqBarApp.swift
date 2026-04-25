@@ -32,6 +32,7 @@ struct LoqBarApp: App {
 
 final class LoqBarAppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
+    private weak var appModel: AppModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -47,10 +48,17 @@ final class LoqBarAppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     func installIfNeeded(appModel: AppModel) {
+        self.appModel = appModel
         if statusBarController == nil {
             statusBarController = StatusBarController(appModel: appModel)
         }
         statusBarController?.updateIcon()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        Task { @MainActor in
+            appModel?.stopRecording(interruptionNote: "Recording stopped because LoqBar is quitting.")
+        }
     }
 }
 

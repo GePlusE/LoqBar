@@ -5,9 +5,21 @@ import CoreMedia
 import ScreenCaptureKit
 #endif
 
+enum CaptureInterruptionReason: String {
+    case microphoneConfigurationChanged
+
+    var userFacingSummary: String {
+        switch self {
+        case .microphoneConfigurationChanged:
+            return "Recording stopped because the microphone or audio device configuration changed."
+        }
+    }
+}
+
 @MainActor
 final class AudioCaptureCoordinator {
     private var activeCapture: ActiveCaptureSession?
+    var onCaptureInterrupted: ((CaptureInterruptionReason) -> Void)?
 
     func start(
         sessionID: UUID,
@@ -25,7 +37,9 @@ final class AudioCaptureCoordinator {
         let microphoneURL = sessionFolder.appendingPathComponent("microphone.caf")
         let microphoneRecorder: MicrophoneRecorder?
         if diagnosticKind != .systemAudioOnly {
-            let recorder = MicrophoneRecorder(outputURL: microphoneURL)
+            let recorder = MicrophoneRecorder(outputURL: microphoneURL) { [weak self] reason in
+                self?.onCaptureInterrupted?(reason)
+            }
             try recorder.start()
             microphoneRecorder = recorder
         } else {
@@ -116,11 +130,13 @@ struct ActiveCaptureSession {
 final class MicrophoneRecorder {
     private let engine = AVAudioEngine()
     private let outputURL: URL
+    private let interruptionHandler: (CaptureInterruptionReason) -> Void
     private var audioFile: AVAudioFile?
     private var isRecording = false
 
-    init(outputURL: URL) {
+    init(outputURL: URL, interruptionHandler: @escaping (CaptureInterruptionReason) -> Void) {
         self.outputURL = outputURL
+        self.interruptionHandler = interruptionHandler
     }
 
     func start() throws {
@@ -156,15 +172,32 @@ final class MicrophoneRecorder {
 
         engine.prepare()
         try engine.start()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleEngineConfigurationChange),
+            name: .AVAudioEngineConfigurationChange,
+            object: engine
+        )
         isRecording = true
     }
 
     func stop() throws {
         guard isRecording else { return }
+        NotificationCenter.default.removeObserver(
+            self,
+            name: .AVAudioEngineConfigurationChange,
+            object: engine
+        )
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         audioFile = nil
         isRecording = false
+    }
+
+    @objc
+    private func handleEngineConfigurationChange() {
+        guard isRecording else { return }
+        interruptionHandler(.microphoneConfigurationChanged)
     }
 }
 

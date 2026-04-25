@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import Combine
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -21,6 +22,7 @@ final class AppModel: ObservableObject {
     private let audioStorageOptimizer: AudioStorageOptimizer
     private let transcriptRevisionService: TranscriptRevisionService
     private let retentionCleanupService: RetentionCleanupService
+    private var cancellables = Set<AnyCancellable>()
 
     init(
         permissionsService: PermissionsService = PermissionsService(),
@@ -44,8 +46,14 @@ final class AppModel: ObservableObject {
         self.audioStorageOptimizer = audioStorageOptimizer
         self.transcriptRevisionService = transcriptRevisionService
         self.retentionCleanupService = retentionCleanupService
+        self.recordingCoordinator.onCaptureInterrupted = { [weak self] reason in
+            Task { @MainActor in
+                self?.handleCaptureInterruption(reason)
+            }
+        }
 
         loadInitialState()
+        observeWorkspaceLifecycle()
     }
 
     var activeSession: SessionRecord? {
@@ -213,11 +221,15 @@ final class AppModel: ObservableObject {
     }
 
     func stopRecording() {
+        stopRecording(interruptionNote: nil)
+    }
+
+    func stopRecording(interruptionNote: String?) {
         guard let session = activeSession else { return }
 
         if let sessionIndex = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[sessionIndex].status = .processing
-            sessions[sessionIndex].notes = "Stopping capture..."
+            sessions[sessionIndex].notes = interruptionNote ?? "Stopping capture..."
             persist()
         }
 
@@ -229,9 +241,9 @@ final class AppModel: ObservableObject {
                     activeCapture,
                     optimizedAudio: optimizedAudio,
                     to: session.id,
-                    fallbackNote: "Capture finished."
+                    fallbackNote: interruptionNote ?? "Capture finished."
                 )
-                finalizeSession(session.id)
+                finalizeSession(session.id, notePrefix: interruptionNote)
             } catch {
                 markSessionFailed(session.id, error: .recordingStopFailed(error.localizedDescription))
             }
@@ -655,6 +667,10 @@ final class AppModel: ObservableObject {
     }
 
     private func finalizeSession(_ sessionID: UUID) {
+        finalizeSession(sessionID, notePrefix: nil)
+    }
+
+    private func finalizeSession(_ sessionID: UUID, notePrefix: String?) {
         guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
 
         sessions[sessionIndex].endedAt = Date()
@@ -666,6 +682,10 @@ final class AppModel: ObservableObject {
 
         do {
             try transcribeAndExportSession(sessionID)
+            if let notePrefix, let refreshedIndex = sessions.firstIndex(where: { $0.id == sessionID }) {
+                sessions[refreshedIndex].notes = "\(notePrefix) \(sessions[refreshedIndex].notes)"
+                persist()
+            }
             runRetentionCleanupIfNeeded()
         } catch let error as AppError {
             markSessionCompletedWithTranscriptionIssue(sessionID, error: error)
@@ -717,6 +737,35 @@ final class AppModel: ObservableObject {
         }
 
         persist()
+    }
+
+    private func observeWorkspaceLifecycle() {
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)
+            .sink { [weak self] _ in
+                self?.handleWorkspaceWillSleep()
+            }
+            .store(in: &cancellables)
+
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
+            .sink { [weak self] _ in
+                self?.handleWorkspaceDidWake()
+            }
+            .store(in: &cancellables)
+    }
+
+    private func handleWorkspaceWillSleep() {
+        guard activeSession != nil else { return }
+        stopRecording(interruptionNote: "Recording stopped because the Mac is going to sleep.")
+    }
+
+    private func handleWorkspaceDidWake() {
+        refreshPermissions()
+        processingMessage = activeSession == nil ? "Ready" : processingMessage
+    }
+
+    private func handleCaptureInterruption(_ reason: CaptureInterruptionReason) {
+        guard activeSession?.status == .recording else { return }
+        stopRecording(interruptionNote: reason.userFacingSummary)
     }
 
     private func markSessionFailed(_ sessionID: UUID, error: AppError) {
