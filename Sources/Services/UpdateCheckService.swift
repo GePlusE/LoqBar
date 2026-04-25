@@ -18,9 +18,16 @@ struct UpdateCheckService {
         do {
             let (data, response) = try await session.data(from: feedURL)
 
-            guard let httpResponse = response as? HTTPURLResponse,
-                  200..<300 ~= httpResponse.statusCode else {
+            guard let httpResponse = response as? HTTPURLResponse else {
                 return .failed("LoqBar could not load the latest release information right now.")
+            }
+
+            guard 200..<300 ~= httpResponse.statusCode else {
+                return mapHTTPFailure(
+                    statusCode: httpResponse.statusCode,
+                    data: data,
+                    feedURL: feedURL
+                )
             }
 
             let release = try decodeRelease(
@@ -37,6 +44,27 @@ struct UpdateCheckService {
         } catch {
             return .failed("LoqBar could not check for updates: \(error.localizedDescription)")
         }
+    }
+
+    private func mapHTTPFailure(statusCode: Int, data: Data, feedURL: URL) -> UpdateCheckResult {
+        if feedURL.host == "api.github.com", statusCode == 404 {
+            return .failed(
+                "LoqBar could not reach the configured GitHub release feed. GitHub returns 404 for private repositories, so manual update checks require a public release source or public manifest."
+            )
+        }
+
+        if feedURL.host == "api.github.com", statusCode == 403 {
+            return .failed(
+                "GitHub refused the update check right now. This can happen because of API rate limits or release feed access rules."
+            )
+        }
+
+        if let apiError = try? JSONDecoder.githubDecoder.decode(GitHubAPIError.self, from: data),
+           let message = apiError.message?.nilIfEmpty {
+            return .failed("LoqBar could not load the latest release information: \(message)")
+        }
+
+        return .failed("LoqBar could not load the latest release information right now.")
     }
 
     private func decodeRelease(
@@ -122,6 +150,10 @@ private struct GitHubAsset: Decodable {
         case name
         case downloadURL = "browser_download_url"
     }
+}
+
+private struct GitHubAPIError: Decodable {
+    let message: String?
 }
 
 private extension JSONDecoder {
