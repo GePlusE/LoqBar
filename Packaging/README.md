@@ -22,6 +22,18 @@ The script also creates a distributable ZIP:
 dist/LoqBar.zip
 ```
 
+A DMG can be created from the built app bundle:
+
+```bash
+./Packaging/create-dmg.sh
+```
+
+That produces:
+
+```bash
+dist/LoqBar.dmg
+```
+
 ## Build a local app bundle
 
 ```bash
@@ -55,6 +67,12 @@ BUILD_NUMBER="42" \
 ./Packaging/validate-release.sh
 ```
 
+## Create a DMG
+
+```bash
+./Packaging/create-dmg.sh
+```
+
 ## Notarization later
 
 Once the app is signed with a real Developer ID identity, the next step is notarization:
@@ -69,7 +87,7 @@ A fuller release flow is documented in [Packaging/RELEASE_CHECKLIST.md](/Users/g
 
 This packaging layer does **not** yet provide:
 
-- DMG creation
+- a styled/custom DMG layout
 - Sparkle or another updater
 - a login-item helper target
 - automated notarization in CI

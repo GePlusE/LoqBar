@@ -11,6 +11,16 @@ Expected outputs:
 - `dist/LoqBar.app`
 - `dist/LoqBar.zip`
 
+## Create installer DMG
+
+```bash
+./Packaging/create-dmg.sh
+```
+
+Expected output:
+
+- `dist/LoqBar.dmg`
+
 ## Validate
 
 ```bash
@@ -38,6 +48,7 @@ KEYCHAIN_PROFILE="LoqBarNotary" ./Packaging/notarize-app.sh
 ## Final smoke check
 
 - Launch `dist/LoqBar.app`
+- Mount `dist/LoqBar.dmg`
 - Confirm the menu bar icon appears
 - Open Preferences
 - Open Recent Sessions
@@ -46,6 +57,6 @@ KEYCHAIN_PROFILE="LoqBarNotary" ./Packaging/notarize-app.sh
 
 ## Optional next steps
 
-- DMG packaging
+- styled DMG background/layout
 - CI automation for build/sign/notarize
 - updater integration
