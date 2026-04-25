@@ -52,6 +52,7 @@ struct SessionHistoryView: View {
     @State private var useEndDateFilter = false
     @State private var startDateFilter = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
     @State private var endDateFilter = Date()
+    @State private var sessionPendingDeletion: SessionRecord?
 
     var body: some View {
         NavigationStack {
@@ -63,7 +64,7 @@ struct SessionHistoryView: View {
                         ForEach(filteredSessions) { session in
                             SwipeToDeleteSessionCard(
                                 sessionID: session.id,
-                                onDelete: { appModel.deleteSession(session.id) }
+                                onDelete: { sessionPendingDeletion = session }
                             ) {
                                 NavigationLink {
                                     SessionDetailView(sessionID: session.id)
@@ -94,6 +95,20 @@ struct SessionHistoryView: View {
         }
         .onDisappear {
             appModel.restoreMenuBarPresentationIfPossible()
+        }
+        .alert("Delete Session?", isPresented: deletionAlertIsPresented) {
+            Button("Delete", role: .destructive) {
+                if let sessionPendingDeletion {
+                    appModel.deleteSession(sessionPendingDeletion.id)
+                }
+                sessionPendingDeletion = nil
+            }
+
+            Button("Cancel", role: .cancel) {
+                sessionPendingDeletion = nil
+            }
+        } message: {
+            Text(deletionAlertMessage)
         }
     }
 
@@ -323,6 +338,25 @@ struct SessionHistoryView: View {
         }
 
         return parts.joined(separator: " · ")
+    }
+
+    private var deletionAlertIsPresented: Binding<Bool> {
+        Binding(
+            get: { sessionPendingDeletion != nil },
+            set: { isPresented in
+                if !isPresented {
+                    sessionPendingDeletion = nil
+                }
+            }
+        )
+    }
+
+    private var deletionAlertMessage: String {
+        guard let sessionPendingDeletion else {
+            return "This will permanently remove the session and all associated files."
+        }
+
+        return "Delete \"\(sessionPendingDeletion.title)\" and remove its transcript and audio files from disk?"
     }
 }
 
