@@ -90,6 +90,14 @@ Supported feed formats:
   - `published_at`
   - `notes`
 
+For local `swift run` development, LoqBar also falls back to:
+
+- environment variables `RELEASE_FEED_URL` and `RELEASE_PAGE_URL`
+- `Packaging/release.env`
+- `Packaging/release.env.local`
+
+That makes it possible to test the manual updater before building a packaged `.app`.
+
 ## Validate the bundle
 
 ```bash

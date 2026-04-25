@@ -6,14 +6,73 @@ struct AppReleaseFeedConfiguration {
 
     static func fromMainBundle() -> AppReleaseFeedConfiguration {
         let info = Bundle.main.infoDictionary ?? [:]
-        let feedURL = (info["LoqBarReleaseFeedURL"] as? String)
-            .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
-            .flatMap(URL.init(string:))
-        let releasePageURL = (info["LoqBarReleasePageURL"] as? String)
-            .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
-            .flatMap(URL.init(string:))
+        let bundleFeedURL = (info["LoqBarReleaseFeedURL"] as? String)
+            .flatMap(normalizedURL)
+        let bundleReleasePageURL = (info["LoqBarReleasePageURL"] as? String)
+            .flatMap(normalizedURL)
 
-        return AppReleaseFeedConfiguration(feedURL: feedURL, releasePageURL: releasePageURL)
+        if bundleFeedURL != nil || bundleReleasePageURL != nil {
+            return AppReleaseFeedConfiguration(feedURL: bundleFeedURL, releasePageURL: bundleReleasePageURL)
+        }
+
+        let environment = ProcessInfo.processInfo.environment
+        let envFeedURL = environment["RELEASE_FEED_URL"].flatMap(normalizedURL)
+        let envReleasePageURL = environment["RELEASE_PAGE_URL"].flatMap(normalizedURL)
+
+        if envFeedURL != nil || envReleasePageURL != nil {
+            return AppReleaseFeedConfiguration(feedURL: envFeedURL, releasePageURL: envReleasePageURL)
+        }
+
+        let localFallback = localDevelopmentFallback()
+        return AppReleaseFeedConfiguration(feedURL: localFallback.feedURL, releasePageURL: localFallback.releasePageURL)
+    }
+
+    private static func localDevelopmentFallback() -> (feedURL: URL?, releasePageURL: URL?) {
+        let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let candidateFiles = [
+            currentDirectory.appendingPathComponent("Packaging/release.env"),
+            currentDirectory.appendingPathComponent("Packaging/release.env.local")
+        ]
+
+        for candidate in candidateFiles {
+            guard let content = try? String(contentsOf: candidate, encoding: .utf8) else { continue }
+            let values = parseShellExports(from: content)
+            let feedURL = values["RELEASE_FEED_URL"].flatMap(normalizedURL)
+            let releasePageURL = values["RELEASE_PAGE_URL"].flatMap(normalizedURL)
+
+            if feedURL != nil || releasePageURL != nil {
+                return (feedURL, releasePageURL)
+            }
+        }
+
+        return (nil, nil)
+    }
+
+    private static func parseShellExports(from content: String) -> [String: String] {
+        content
+            .split(whereSeparator: \.isNewline)
+            .reduce(into: [:]) { result, rawLine in
+                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard line.hasPrefix("export ") else { return }
+
+                let declaration = String(line.dropFirst("export ".count))
+                let parts = declaration.split(separator: "=", maxSplits: 1).map(String.init)
+                guard parts.count == 2 else { return }
+
+                let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                let value = parts[1]
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+
+                result[key] = value
+            }
+    }
+
+    private static func normalizedURL(_ rawValue: String) -> URL? {
+        rawValue
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .nilIfEmpty
+            .flatMap(URL.init(string:))
     }
 }
 

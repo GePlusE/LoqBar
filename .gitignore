@@ -1,2 +1,4 @@
 .DS_Store
 .build/
+Packaging/release.env
+Packaging/release.env.local
