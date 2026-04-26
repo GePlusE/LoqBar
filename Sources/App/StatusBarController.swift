@@ -72,7 +72,9 @@ final class StatusBarController: NSObject {
         switch event.type {
         case .rightMouseUp:
             closePopoverIfNeeded()
-            appModel.toggleRecordingFromStatusItem()
+            DispatchQueue.main.async { [weak self] in
+                self?.appModel.toggleRecordingFromStatusItem()
+            }
         default:
             togglePopover()
         }

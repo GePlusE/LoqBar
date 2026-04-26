@@ -68,6 +68,12 @@ enum AppError: Error {
     }
 }
 
+extension AppError: LocalizedError {
+    var errorDescription: String? {
+        recoverySuggestion
+    }
+}
+
 struct AlertContext: Identifiable {
     let id = UUID()
     let title: String

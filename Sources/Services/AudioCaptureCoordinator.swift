@@ -87,13 +87,33 @@ final class AudioCaptureCoordinator {
             throw AppError.recordingStopFailed("No active LoqBar recording was found.")
         }
 
-        try capture.microphoneRecorder?.stop()
-        if let screenRecorder = capture.screenRecorder {
-            try await screenRecorder.stop()
+        activeCapture = nil
+
+        var shutdownWarnings: [String] = []
+
+        do {
+            try capture.microphoneRecorder?.stop()
+        } catch let error as AppError {
+            shutdownWarnings.append(error.recoverySuggestion)
+        } catch {
+            shutdownWarnings.append("LoqBar hit a microphone shutdown issue: \(error.localizedDescription)")
         }
 
-        capture.summary = capture.stopSummary
-        activeCapture = nil
+        if let screenRecorder = capture.screenRecorder {
+            do {
+                try await screenRecorder.stop()
+            } catch let error as AppError {
+                shutdownWarnings.append(error.recoverySuggestion)
+            } catch {
+                shutdownWarnings.append("LoqBar hit a system-audio shutdown issue: \(error.localizedDescription)")
+            }
+        }
+
+        if shutdownWarnings.isEmpty {
+            capture.summary = capture.stopSummary
+        } else {
+            capture.summary = "\(capture.stopSummary) Shutdown warnings: \(shutdownWarnings.joined(separator: " "))"
+        }
         return capture
     }
 }

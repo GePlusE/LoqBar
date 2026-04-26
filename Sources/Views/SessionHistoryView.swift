@@ -624,7 +624,11 @@ private final class SwipeTrackingView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        self
+        guard NSApp.currentEvent?.type == .scrollWheel else {
+            return nil
+        }
+
+        return self
     }
 
     override func scrollWheel(with event: NSEvent) {
