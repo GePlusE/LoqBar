@@ -44,6 +44,7 @@ private enum SessionHistoryStatusFilter: String, CaseIterable, Identifiable {
 
 struct SessionHistoryView: View {
     @EnvironmentObject private var appModel: AppModel
+    let embeddedInSettings: Bool
     @State private var searchText = ""
     @State private var showFilters = false
     @State private var selectedModeFilter: SessionHistoryModeFilter = .all
@@ -54,46 +55,29 @@ struct SessionHistoryView: View {
     @State private var endDateFilter = Date()
     @State private var sessionPendingDeletion: SessionRecord?
 
+    init(embeddedInSettings: Bool = false) {
+        self.embeddedInSettings = embeddedInSettings
+    }
+
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    headerCard
-
-                    LazyVStack(alignment: .leading, spacing: 16) {
-                        ForEach(filteredSessions) { session in
-                            SwipeToDeleteSessionCard(
-                                sessionID: session.id,
-                                onDelete: { sessionPendingDeletion = session }
-                            ) {
-                                NavigationLink {
-                                    SessionDetailView(sessionID: session.id)
-                                        .environmentObject(appModel)
-                                } label: {
-                                    SessionRow(session: session)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-
-                        if filteredSessions.isEmpty {
-                            emptyStateCard
-                        }
-                    }
+        Group {
+            if embeddedInSettings {
+                NavigationStack {
+                    sessionHistoryContent
                 }
-                .padding(.horizontal, 28)
-                .padding(.top, 28)
-                .padding(.bottom, 40)
-                .frame(maxWidth: 980, alignment: .leading)
+            } else {
+                NavigationStack {
+                    sessionHistoryContent
+                        .navigationTitle("Recent Sessions")
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(Color(nsColor: .windowBackgroundColor))
-            .navigationTitle("Recent Sessions")
         }
         .onAppear {
+            guard !embeddedInSettings else { return }
             appModel.bringAuxiliaryWindowToFront(titleContains: "Recent Sessions")
         }
         .onDisappear {
+            guard !embeddedInSettings else { return }
             appModel.restoreMenuBarPresentationIfPossible()
         }
         .alert("Delete Session?", isPresented: deletionAlertIsPresented) {
@@ -110,6 +94,41 @@ struct SessionHistoryView: View {
         } message: {
             Text(deletionAlertMessage)
         }
+    }
+
+    private var sessionHistoryContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                headerCard
+
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    ForEach(filteredSessions) { session in
+                        SwipeToDeleteSessionCard(
+                            sessionID: session.id,
+                            onDelete: { sessionPendingDeletion = session }
+                        ) {
+                            NavigationLink {
+                                SessionDetailView(sessionID: session.id)
+                                    .environmentObject(appModel)
+                            } label: {
+                                SessionRow(session: session)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    if filteredSessions.isEmpty {
+                        emptyStateCard
+                    }
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, embeddedInSettings ? 24 : 28)
+            .padding(.bottom, 40)
+            .frame(maxWidth: 980, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var filteredSessions: [SessionRecord] {

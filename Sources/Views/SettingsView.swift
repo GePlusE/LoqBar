@@ -5,6 +5,7 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
     case general
     case storage
     case transcription
+    case sessions
 
     var id: Self { self }
 
@@ -16,6 +17,8 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
             return "Storage"
         case .transcription:
             return "Transcription"
+        case .sessions:
+            return "Sessions"
         }
     }
 
@@ -27,6 +30,8 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
             return "externaldrive"
         case .transcription:
             return "waveform.and.magnifyingglass"
+        case .sessions:
+            return "rectangle.stack"
         }
     }
 
@@ -38,6 +43,8 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
             return "Where LoqBar stores recordings and transcripts."
         case .transcription:
             return "How local transcription is configured."
+        case .sessions:
+            return "Browse, search, and manage captured sessions."
         }
     }
 }
@@ -48,30 +55,46 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsPane.allCases, selection: $selectedPane) { pane in
-                Label(pane.title, systemImage: pane.iconName)
-                    .tag(pane)
+            List(selection: $selectedPane) {
+                Section("Settings") {
+                    ForEach([SettingsPane.general, .storage, .transcription], id: \.self) { pane in
+                        Label(pane.title, systemImage: pane.iconName)
+                            .tag(pane)
+                    }
+                }
+
+                Section("Workspace") {
+                    Label(SettingsPane.sessions.title, systemImage: SettingsPane.sessions.iconName)
+                        .tag(SettingsPane.sessions)
+                }
             }
             .navigationSplitViewColumnWidth(min: 220, ideal: 240)
         } detail: {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    detailHeader
-                    detailContent
+            if activePane == .sessions {
+                SessionHistoryView(embeddedInSettings: true)
+                    .environmentObject(appModel)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .background(Color(nsColor: .windowBackgroundColor))
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        detailHeader
+                        detailContent
 
-                    HStack {
-                        Spacer()
-                        Button("Save Settings") {
-                            appModel.persist()
+                        HStack {
+                            Spacer()
+                            Button("Save Settings") {
+                                appModel.persist()
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
-                        .buttonStyle(.borderedProminent)
                     }
+                    .padding(28)
+                    .frame(maxWidth: 760, alignment: .leading)
                 }
-                .padding(28)
-                .frame(maxWidth: 760, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(Color(nsColor: .windowBackgroundColor))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color(nsColor: .windowBackgroundColor))
         }
         .onAppear {
             appModel.bringAuxiliaryWindowToFront(titleContains: "Settings")
@@ -118,6 +141,8 @@ struct SettingsView: View {
             storagePane
         case .transcription:
             transcriptionPane
+        case .sessions:
+            EmptyView()
         }
     }
 
