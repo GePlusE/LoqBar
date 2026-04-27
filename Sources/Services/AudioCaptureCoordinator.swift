@@ -21,6 +21,10 @@ final class AudioCaptureCoordinator {
     private var activeCapture: ActiveCaptureSession?
     var onCaptureInterrupted: ((CaptureInterruptionReason) -> Void)?
 
+    var hasActiveCapture: Bool {
+        activeCapture != nil
+    }
+
     func start(
         sessionID: UUID,
         mode: CaptureMode,

@@ -86,7 +86,8 @@ struct RetentionCleanupService {
     }
 
     private func shouldPruneAudio(for session: SessionRecord, cutoffDate: Date) -> Bool {
-        guard !session.isActive else { return false }
+        guard !session.isRecording else { return false }
+        guard !session.isProcessing else { return false }
         guard session.transcriptPath != nil else { return false }
         guard session.audioPath != nil || session.systemAudioPath != nil else { return false }
 

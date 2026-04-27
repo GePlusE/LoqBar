@@ -53,7 +53,7 @@ struct SessionDetailView: View {
                     Button("Retry Transcription") {
                         appModel.retryTranscription(for: session.id)
                     }
-                    .disabled(session.isActive || !session.hasTranscribableAudio)
+                    .disabled(session.isRecording || session.isProcessing || !session.hasTranscribableAudio)
                 }
 
                 detailRow("Status") {

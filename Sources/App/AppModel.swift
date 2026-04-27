@@ -61,7 +61,11 @@ final class AppModel: ObservableObject {
     }
 
     var activeSession: SessionRecord? {
-        sessions.first(where: \.isActive)
+        sessions.first(where: \.isRecording)
+    }
+
+    var hasProcessingSessions: Bool {
+        sessions.contains(where: \.isProcessing)
     }
 
     var latestSession: SessionRecord? {
@@ -73,7 +77,7 @@ final class AppModel: ObservableObject {
     }
 
     var isRecordingInMenuBar: Bool {
-        activeSession != nil
+        activeSession != nil || recordingCoordinator.hasActiveCapture
     }
 
     var transcriptionSetupStatus: TranscriptionSetupStatus {
@@ -138,6 +142,7 @@ final class AppModel: ObservableObject {
 
     func startRecording() {
         guard activeSession == nil else { return }
+        guard !recordingCoordinator.hasActiveCapture else { return }
 
         Task {
             let refreshedPermissions = await permissionsService.ensurePermissions(for: settings.defaultCaptureMode)
@@ -189,6 +194,7 @@ final class AppModel: ObservableObject {
 
     func startDiagnosticRecording(_ diagnosticKind: DiagnosticCaptureKind) {
         guard activeSession == nil else { return }
+        guard !recordingCoordinator.hasActiveCapture else { return }
 
         Task {
             let refreshedPermissions = await permissionsService.ensurePermissions(for: diagnosticKind)
@@ -288,8 +294,13 @@ final class AppModel: ObservableObject {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         let session = sessions[index]
 
-        guard !session.isActive else {
+        guard !session.isRecording else {
             present(error: .sessionDeletionFailed("Stop the active recording before deleting this session."))
+            return
+        }
+
+        guard !session.isProcessing else {
+            present(error: .sessionDeletionFailed("Wait for the current transcription/export work to finish before deleting this session."))
             return
         }
 
@@ -312,7 +323,8 @@ final class AppModel: ObservableObject {
 
     func retryTranscription(for sessionID: UUID) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        guard !sessions[index].isActive else { return }
+        guard !sessions[index].isRecording else { return }
+        guard !sessions[index].isProcessing else { return }
         guard sessions[index].audioPath != nil || sessions[index].systemAudioPath != nil else {
             present(error: .transcriptionExecutionFailed("This session does not have any saved audio files to transcribe yet."))
             return
@@ -855,17 +867,17 @@ final class AppModel: ObservableObject {
     }
 
     private func handleWorkspaceWillSleep() {
-        guard activeSession != nil else { return }
+        guard activeSession != nil || recordingCoordinator.hasActiveCapture else { return }
         stopRecording(interruptionNote: "Recording stopped because the Mac is going to sleep.")
     }
 
     private func handleWorkspaceDidWake() {
         refreshPermissions()
-        processingMessage = activeSession == nil ? "Ready" : processingMessage
+        processingMessage = activeSession == nil && !hasProcessingSessions ? "Ready" : processingMessage
     }
 
     private func handleCaptureInterruption(_ reason: CaptureInterruptionReason) {
-        guard activeSession?.status == .recording else { return }
+        guard activeSession?.isRecording == true else { return }
         stopRecording(interruptionNote: reason.userFacingSummary)
     }
 

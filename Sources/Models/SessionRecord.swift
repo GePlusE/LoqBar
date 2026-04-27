@@ -45,8 +45,16 @@ struct SessionRecord: Identifiable, Codable, Hashable {
         case notes
     }
 
+    var isRecording: Bool {
+        status == .recording
+    }
+
+    var isProcessing: Bool {
+        status == .processing
+    }
+
     var isActive: Bool {
-        status == .recording || status == .processing
+        isRecording
     }
 
     var hasTranscribableAudio: Bool {
