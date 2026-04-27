@@ -218,21 +218,24 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 18) {
             transcriptionStatusCard
 
-            settingsField("Model identifier") {
+            settingsField("Model") {
                 VStack(alignment: .leading, spacing: 10) {
-                    TextField("Local model identifier", text: $appModel.settings.transcriptionModelIdentifier)
-                        .textFieldStyle(.roundedBorder)
-
-                    HStack(spacing: 10) {
+                    Picker("Transcription model", selection: Binding(
+                        get: {
+                            TranscriptionModelSuggestion.allCases.first(where: {
+                                $0.identifier == appModel.settings.normalizedTranscriptionModelIdentifier
+                            }) ?? .base
+                        },
+                        set: { appModel.settings.transcriptionModelIdentifier = $0.identifier }
+                    )) {
                         ForEach(TranscriptionModelSuggestion.allCases) { suggestion in
-                            Button("Use \(suggestion.title)") {
-                                appModel.settings.transcriptionModelIdentifier = suggestion.identifier
-                            }
-                            .buttonStyle(.bordered)
+                            Text(suggestion.title).tag(suggestion)
                         }
                     }
+                    .labelsHidden()
+                    .frame(maxWidth: 260, alignment: .leading)
 
-                    infoText("For call recordings, `small` is the best next step after `base`. Try `medium` when you want stronger recognition and your Mac can handle the extra processing time.")
+                    infoText("`Base` is fastest but weakest. `Small` is the best default for call recordings. `Medium` is stronger on noisy or difficult speech, but slower and heavier on your Mac.")
                 }
             }
 
