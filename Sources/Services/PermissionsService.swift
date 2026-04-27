@@ -61,6 +61,33 @@ struct PermissionsService {
         NSWorkspace.shared.open(url)
     }
 
+    func resetScreenCapturePermission() throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+
+        let bundleIdentifier = Bundle.main.bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let identifier = (bundleIdentifier?.isEmpty == false) ? bundleIdentifier! : "com.loqbar.app"
+        process.arguments = ["reset", "ScreenCapture", identifier]
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            throw AppError.permissionRepairFailed(
+                stderrText.isEmpty
+                ? "LoqBar could not reset the ScreenCapture permission state."
+                : "LoqBar could not reset the ScreenCapture permission state: \(stderrText)"
+            )
+        }
+    }
+
     private func screenCaptureAccessGranted() -> Bool {
         #if canImport(ScreenCaptureKit)
         return CGPreflightScreenCaptureAccess()

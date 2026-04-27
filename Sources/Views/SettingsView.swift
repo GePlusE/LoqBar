@@ -180,13 +180,20 @@ struct SettingsView: View {
 
             infoCard(
                 title: "Permissions",
-                body: "Refresh LoqBar's permission state after changing microphone or screen recording access in System Settings."
+                body: "Refresh LoqBar's permission state after changing microphone or screen recording access in System Settings. If macOS shows Screen Recording enabled but LoqBar still disagrees, use the reset action to force macOS to rebuild the ScreenCapture permission state."
             )
 
-            Button("Refresh Permissions") {
-                appModel.refreshPermissions()
+            HStack(spacing: 12) {
+                Button("Refresh Permissions") {
+                    appModel.refreshPermissions()
+                }
+                .buttonStyle(.bordered)
+
+                Button("Reset Screen Permission") {
+                    appModel.resetScreenCapturePermission()
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.bordered)
         }
     }
 

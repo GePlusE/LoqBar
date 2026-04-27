@@ -9,6 +9,7 @@ enum AppError: Error {
     case transcriptionConfigurationMissing(String)
     case transcriptionExecutionFailed(String)
     case loginItemUpdateFailed(String)
+    case permissionRepairFailed(String)
     case transcriptExportFailed(String)
     case storageSetupFailed(String)
     case sessionDeletionFailed(String)
@@ -31,6 +32,8 @@ enum AppError: Error {
             return "Transcription Could Not Run"
         case .loginItemUpdateFailed:
             return "Launch at Login Could Not Be Updated"
+        case .permissionRepairFailed:
+            return "Permission Repair Failed"
         case .transcriptExportFailed:
             return "Transcript Export Failed"
         case .storageSetupFailed:
@@ -57,6 +60,8 @@ enum AppError: Error {
         case let .transcriptionExecutionFailed(details):
             return details
         case let .loginItemUpdateFailed(details):
+            return details
+        case let .permissionRepairFailed(details):
             return details
         case let .transcriptExportFailed(details):
             return details

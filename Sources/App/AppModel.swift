@@ -121,6 +121,25 @@ final class AppModel: ObservableObject {
         permissionState = permissionsService.currentState()
     }
 
+    func resetScreenCapturePermission() {
+        do {
+            try permissionsService.resetScreenCapturePermission()
+            permissionState = permissionsService.currentState()
+            alertContext = AlertContext(
+                title: "Screen Permission Reset",
+                message: """
+                LoqBar reset macOS screen capture permission state.
+
+                If macOS prompts again, allow Screen & System Audio Recording for LoqBar. If Remote mode still looks unavailable, quit and reopen LoqBar once.
+                """
+            )
+        } catch let error as AppError {
+            present(error: error)
+        } catch {
+            present(error: .permissionRepairFailed("LoqBar could not reset screen capture permission state: \(error.localizedDescription)"))
+        }
+    }
+
     func completeFirstRun() {
         settings.firstRunCompleted = true
         settings.launchAtLoginEnabled = firstRunState.launchAtLogin

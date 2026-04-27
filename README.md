@@ -61,6 +61,17 @@ On first use, LoqBar may ask for:
 
 If you want to use `Remote` / `Call` capture, both permissions should be enabled.
 
+### Troubleshooting Permissions
+
+If macOS shows `Screen Recording` / `Screen & System Audio Recording` enabled for LoqBar, but LoqBar still behaves as if the permission is missing:
+
+1. Open `LoqBar > Preferences > General`
+2. Click `Reset Screen Permission`
+3. If macOS prompts again, allow the screen/system-audio permission for LoqBar
+4. If `Remote` still looks unavailable, quit and reopen LoqBar once
+
+This fixes a stale macOS `ScreenCapture` permission state that can occasionally survive normal toggling in System Settings.
+
 ### Transcription Setup
 
 Recording works on its own. For transcription on another Mac, LoqBar can now install its managed transcription setup from inside the app.
