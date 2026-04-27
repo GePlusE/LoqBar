@@ -60,6 +60,36 @@ enum TranscriptionModelSuggestion: String, CaseIterable, Identifiable {
         }
     }
 
+    var managedModelFileName: String {
+        switch self {
+        case .base:
+            return "ggml-base.bin"
+        case .small:
+            return "ggml-small.bin"
+        case .medium:
+            return "ggml-medium.bin"
+        case .large:
+            return "ggml-large-v3.bin"
+        }
+    }
+
+    var managedDownloadURL: URL {
+        URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(managedModelFileName)")!
+    }
+
+    var approximateDownloadSize: String {
+        switch self {
+        case .base:
+            return "about 150 MB"
+        case .small:
+            return "about 500 MB"
+        case .medium:
+            return "about 1.5 GB"
+        case .large:
+            return "about 3.1 GB"
+        }
+    }
+
     var summary: String {
         switch self {
         case .base:
@@ -148,6 +178,10 @@ struct AppSettings: Codable {
             return "ggml-base.bin"
         }
 
+        if normalized == TranscriptionModelSuggestion.large.identifier {
+            return TranscriptionModelSuggestion.large.managedModelFileName
+        }
+
         if normalized.hasSuffix(".bin") || normalized.hasSuffix(".gguf") {
             return normalized
         }
@@ -164,6 +198,10 @@ struct AppSettings: Codable {
         transcriptionModelIdentifier
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+    }
+
+    var selectedModelSuggestion: TranscriptionModelSuggestion? {
+        TranscriptionModelSuggestion.allCases.first { $0.identifier == normalizedTranscriptionModelIdentifier }
     }
 }
 

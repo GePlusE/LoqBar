@@ -19,6 +19,7 @@ BUILD_NUMBER="${BUILD_NUMBER:-1}"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 RELEASE_FEED_URL="${RELEASE_FEED_URL:-https://api.github.com/repos/GePlusE/LoqBar/releases/latest}"
 RELEASE_PAGE_URL="${RELEASE_PAGE_URL:-https://github.com/GePlusE/LoqBar/releases}"
+MANAGED_WHISPER_EXECUTABLE_PATH="${MANAGED_WHISPER_EXECUTABLE_PATH:-$ROOT_DIR/tools/whisper.cpp/build/bin/whisper-cli}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$ROOT_DIR/dist}"
 BUILD_ROOT="$ROOT_DIR/.build/apple/$CONFIGURATION"
 APP_BUNDLE="$OUTPUT_ROOT/$APP_NAME.app"
@@ -70,8 +71,24 @@ else
   /usr/libexec/PlistBuddy -c "Delete :CFBundleIconFile" "$INFO_PLIST" >/dev/null 2>&1 || true
 fi
 
+if [[ -x "$MANAGED_WHISPER_EXECUTABLE_PATH" ]]; then
+  mkdir -p "$APP_BUNDLE/Contents/Resources/ManagedTranscription"
+  cp "$MANAGED_WHISPER_EXECUTABLE_PATH" "$APP_BUNDLE/Contents/Resources/ManagedTranscription/whisper-cli"
+  chmod +x "$APP_BUNDLE/Contents/Resources/ManagedTranscription/whisper-cli"
+  echo "Bundled managed whisper-cli from:"
+  echo "  $MANAGED_WHISPER_EXECUTABLE_PATH"
+else
+  echo "Warning: managed whisper-cli was not bundled."
+  echo "Expected executable at:"
+  echo "  $MANAGED_WHISPER_EXECUTABLE_PATH"
+fi
+
 echo "Codesigning with identity: $SIGNING_IDENTITY"
-codesign --force --deep --timestamp=none --entitlements "$ENTITLEMENTS_FILE" --sign "$SIGNING_IDENTITY" "$APP_BUNDLE"
+if [[ "$SIGNING_IDENTITY" == "-" ]]; then
+  codesign --force --deep --timestamp=none --entitlements "$ENTITLEMENTS_FILE" --sign "$SIGNING_IDENTITY" "$APP_BUNDLE"
+else
+  codesign --force --deep --options runtime --timestamp --entitlements "$ENTITLEMENTS_FILE" --sign "$SIGNING_IDENTITY" "$APP_BUNDLE"
+fi
 
 echo "Creating distributable ZIP..."
 ditto --norsrc -c -k --keepParent "$APP_BUNDLE" "$ZIP_PATH"

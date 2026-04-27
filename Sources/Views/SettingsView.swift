@@ -235,7 +235,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .frame(maxWidth: 260, alignment: .leading)
 
-                    infoText("`Base` is fastest but weakest. `Small` is the best default for call recordings. `Medium` is stronger on noisy or difficult speech. `Large` is the highest-quality option here, but it can be much slower and heavier on memory and CPU/GPU.")
+                    infoText("`Base` is fastest but weakest. `Small` is the best default for call recordings. `Medium` is stronger on noisy or difficult speech. `Large` is the highest-quality option here, but it can be much slower and heavier on memory and CPU/GPU. LoqBar downloads the selected managed model automatically when you install the managed setup.")
                 }
             }
 
@@ -260,17 +260,25 @@ struct SettingsView: View {
             infoCard(
                 title: "Managed Transcription Folder",
                 body: """
-                If no external paths are configured, LoqBar will use the hidden managed folder inside your storage root:
+                If no external paths are configured, LoqBar will use the hidden managed folder inside your storage root.
+
+                The managed setup installs a bundled `whisper-cli` and downloads the selected model automatically for this Mac.
 
                 \(appModel.settings.managedTranscriptionRootFolder)
                 """
             )
 
+            infoCard(
+                title: "Managed Setup Status",
+                body: appModel.managedTranscriptionInstallStatus
+            )
+
             HStack(spacing: 12) {
-                Button("Install Managed Copy") {
+                Button(appModel.isInstallingManagedTranscription ? "Installing…" : "Install Managed Copy") {
                     appModel.installManagedTranscriptionFiles()
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(appModel.isInstallingManagedTranscription)
 
                 Button("Clear External Paths") {
                     appModel.clearExternalTranscriptionPaths()
@@ -280,6 +288,11 @@ struct SettingsView: View {
                     appModel.settings.transcriptionExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
                     appModel.settings.transcriptionModelPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 )
+            }
+
+            if appModel.isInstallingManagedTranscription {
+                ProgressView()
+                    .controlSize(.small)
             }
 
             settingsField("Optional external whisper-cli path") {
@@ -432,6 +445,7 @@ struct SettingsView: View {
             return """
             Current model: \(suggestion.title) (`\(suggestion.identifier)`)
             \(suggestion.summary)
+            Expected managed download size: \(suggestion.approximateDownloadSize).
             \(recommendation)
             """
         }

@@ -63,7 +63,7 @@ If you want to use `Remote` / `Call` capture, both permissions should be enabled
 
 ### Transcription Setup
 
-Recording works on its own, but local transcription still needs a whisper engine and model on each Mac.
+Recording works on its own. For transcription on another Mac, LoqBar can now install its managed transcription setup from inside the app.
 
 After installation:
 
@@ -72,6 +72,10 @@ After installation:
 3. Either:
    - choose existing external `whisper-cli` and model paths
    - or use LoqBar's managed transcription setup flow
+4. If you choose the managed flow:
+   - LoqBar installs its bundled `whisper-cli`
+   - LoqBar downloads the selected model into the hidden `.loqbar` folder inside your storage root
+   - wait for the setup status to change to `Ready`
 
 If transcription is not configured yet, LoqBar will still save recordings and let you retry transcription later.
 

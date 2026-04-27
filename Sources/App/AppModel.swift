@@ -12,6 +12,8 @@ final class AppModel: ObservableObject {
     @Published var alertContext: AlertContext?
     @Published var processingMessage = "Ready"
     @Published var updateStatus = UpdateStatusSummary.idle
+    @Published var managedTranscriptionInstallStatus = "Managed transcription is not installing right now."
+    @Published var isInstallingManagedTranscription = false
 
     private let permissionsService: PermissionsService
     private let loginItemService: LoginItemService
@@ -24,6 +26,7 @@ final class AppModel: ObservableObject {
     private let transcriptRevisionService: TranscriptRevisionService
     private let retentionCleanupService: RetentionCleanupService
     private let updateCheckService: UpdateCheckService
+    private let managedTranscriptionInstallService: ManagedTranscriptionInstallService
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -37,7 +40,8 @@ final class AppModel: ObservableObject {
         audioStorageOptimizer: AudioStorageOptimizer = AudioStorageOptimizer(),
         transcriptRevisionService: TranscriptRevisionService = TranscriptRevisionService(),
         retentionCleanupService: RetentionCleanupService = RetentionCleanupService(),
-        updateCheckService: UpdateCheckService = UpdateCheckService()
+        updateCheckService: UpdateCheckService = UpdateCheckService(),
+        managedTranscriptionInstallService: ManagedTranscriptionInstallService = ManagedTranscriptionInstallService()
     ) {
         self.permissionsService = permissionsService
         self.loginItemService = loginItemService
@@ -50,6 +54,7 @@ final class AppModel: ObservableObject {
         self.transcriptRevisionService = transcriptRevisionService
         self.retentionCleanupService = retentionCleanupService
         self.updateCheckService = updateCheckService
+        self.managedTranscriptionInstallService = managedTranscriptionInstallService
         self.recordingCoordinator.onCaptureInterrupted = { [weak self] reason in
             Task { @MainActor in
                 self?.handleCaptureInterruption(reason)
@@ -108,6 +113,7 @@ final class AppModel: ObservableObject {
             needsOnboarding: !settings.firstRunCompleted,
             launchAtLogin: settings.launchAtLoginEnabled
         )
+        managedTranscriptionInstallStatus = transcriptionSetupStatus.message
         runRetentionCleanupIfNeeded()
     }
 
@@ -615,36 +621,43 @@ final class AppModel: ObservableObject {
     }
 
     func installManagedTranscriptionFiles() {
-        do {
-            let source = try resolveManagedTranscriptionInstallSource()
-            let fileManager = FileManager.default
+        guard !isInstallingManagedTranscription else { return }
 
-            let executableURL = URL(fileURLWithPath: settings.managedTranscriptionExecutablePath)
-            let modelURL = URL(fileURLWithPath: settings.managedTranscriptionModelPath)
+        isInstallingManagedTranscription = true
+        managedTranscriptionInstallStatus = "Preparing managed transcription setup…"
 
-            try fileManager.createDirectory(at: executableURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try fileManager.createDirectory(at: modelURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        Task {
+            do {
+                let result = try await managedTranscriptionInstallService.install(
+                    settings: settings
+                ) { [weak self] progress in
+                    await MainActor.run {
+                        self?.managedTranscriptionInstallStatus = progress
+                    }
+                }
 
-            if fileManager.fileExists(atPath: executableURL.path) {
-                try fileManager.removeItem(at: executableURL)
+                await MainActor.run {
+                    self.managedTranscriptionInstallStatus = """
+                    Managed transcription is ready.
+                    \(result.executableSourceDescription)
+                    \(result.modelSourceDescription)
+                    """
+                    self.isInstallingManagedTranscription = false
+                    self.persist()
+                }
+            } catch let error as AppError {
+                await MainActor.run {
+                    self.isInstallingManagedTranscription = false
+                    self.managedTranscriptionInstallStatus = "Managed transcription setup failed."
+                    self.present(error: error)
+                }
+            } catch {
+                await MainActor.run {
+                    self.isInstallingManagedTranscription = false
+                    self.managedTranscriptionInstallStatus = "Managed transcription setup failed."
+                    self.present(error: .storageSetupFailed("LoqBar could not install the managed transcription files: \(error.localizedDescription)"))
+                }
             }
-            if fileManager.fileExists(atPath: modelURL.path) {
-                try fileManager.removeItem(at: modelURL)
-            }
-
-            try fileManager.copyItem(at: source.executableURL, to: executableURL)
-            try fileManager.copyItem(at: source.modelURL, to: modelURL)
-
-            var permissions = stat()
-            if stat(executableURL.path, &permissions) == 0 {
-                chmod(executableURL.path, permissions.st_mode | S_IXUSR | S_IXGRP | S_IXOTH)
-            }
-
-            persist()
-        } catch let error as AppError {
-            present(error: error)
-        } catch {
-            present(error: .storageSetupFailed("LoqBar could not install the managed transcription files: \(error.localizedDescription)"))
         }
     }
 
@@ -657,45 +670,6 @@ final class AppModel: ObservableObject {
         alertContext = AlertContext(
             title: error.title,
             message: error.recoverySuggestion
-        )
-    }
-
-    private func resolveManagedTranscriptionInstallSource() throws -> (executableURL: URL, modelURL: URL) {
-        let fileManager = FileManager.default
-
-        let externalExecutable = settings.transcriptionExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        let externalModel = settings.transcriptionModelPath.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if !externalExecutable.isEmpty,
-           !externalModel.isEmpty,
-           fileManager.isExecutableFile(atPath: externalExecutable),
-           fileManager.fileExists(atPath: externalModel) {
-            return (
-                executableURL: URL(fileURLWithPath: externalExecutable),
-                modelURL: URL(fileURLWithPath: externalModel)
-            )
-        }
-
-        let workspaceRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-        let bundledExecutable = workspaceRoot
-            .appendingPathComponent("tools", isDirectory: true)
-            .appendingPathComponent("whisper.cpp", isDirectory: true)
-            .appendingPathComponent("build", isDirectory: true)
-            .appendingPathComponent("bin", isDirectory: true)
-            .appendingPathComponent("whisper-cli")
-        let bundledModel = workspaceRoot
-            .appendingPathComponent("tools", isDirectory: true)
-            .appendingPathComponent("whisper.cpp", isDirectory: true)
-            .appendingPathComponent("models", isDirectory: true)
-            .appendingPathComponent("ggml-base.bin")
-
-        if fileManager.isExecutableFile(atPath: bundledExecutable.path),
-           fileManager.fileExists(atPath: bundledModel.path) {
-            return (executableURL: bundledExecutable, modelURL: bundledModel)
-        }
-
-        throw AppError.transcriptionConfigurationMissing(
-            "LoqBar could not find a usable whisper-cli and model pair to install. Choose working external files first, or provide a managed source in the developer workspace."
         )
     }
 

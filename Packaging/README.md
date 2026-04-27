@@ -22,6 +22,14 @@ The script also creates a distributable ZIP:
 dist/LoqBar.zip
 ```
 
+When available, the build also bundles a managed `whisper-cli` into:
+
+```bash
+LoqBar.app/Contents/Resources/ManagedTranscription/whisper-cli
+```
+
+That lets a clean Mac use LoqBar's managed transcription setup without needing a separate developer workspace copy of whisper.cpp.
+
 A DMG can be created from the built app bundle:
 
 ```bash
@@ -60,6 +68,7 @@ MARKETING_VERSION="0.1.0" \
 BUILD_NUMBER="42" \
 RELEASE_FEED_URL="https://api.github.com/repos/OWNER/REPO/releases/latest" \
 RELEASE_PAGE_URL="https://github.com/OWNER/REPO/releases" \
+MANAGED_WHISPER_EXECUTABLE_PATH="/path/to/whisper-cli" \
 ./Packaging/build-app.sh
 ```
 

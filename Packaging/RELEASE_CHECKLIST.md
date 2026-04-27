@@ -39,11 +39,18 @@ Checks:
 - bundle signature verifies
 - Gatekeeper assessment passes
 - ZIP contains the app bundle
+- managed `whisper-cli` is bundled in the app resources
 
 ## Distribution signing
 
 ```bash
 SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./Packaging/build-app.sh
+```
+
+For production builds, make sure the managed whisper binary is bundled too:
+
+```bash
+MANAGED_WHISPER_EXECUTABLE_PATH="/absolute/path/to/whisper-cli" ./Packaging/build-app.sh
 ```
 
 ## Notarize
