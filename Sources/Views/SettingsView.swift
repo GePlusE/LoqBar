@@ -219,9 +219,27 @@ struct SettingsView: View {
             transcriptionStatusCard
 
             settingsField("Model identifier") {
-                TextField("Local model identifier", text: $appModel.settings.transcriptionModelIdentifier)
-                    .textFieldStyle(.roundedBorder)
+                VStack(alignment: .leading, spacing: 10) {
+                    TextField("Local model identifier", text: $appModel.settings.transcriptionModelIdentifier)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack(spacing: 10) {
+                        ForEach(TranscriptionModelSuggestion.allCases) { suggestion in
+                            Button("Use \(suggestion.title)") {
+                                appModel.settings.transcriptionModelIdentifier = suggestion.identifier
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+
+                    infoText("For call recordings, `small` is the best next step after `base`. Try `medium` when you want stronger recognition and your Mac can handle the extra processing time.")
+                }
             }
+
+            infoCard(
+                title: "Model Quality Guidance",
+                body: modelQualityGuidanceText
+            )
 
             settingsField("Language") {
                 Picker("Language", selection: Binding(
@@ -398,6 +416,34 @@ struct SettingsView: View {
         let lastRunText = appModel.settings.lastCleanupAt.map { formatter.string(from: $0) } ?? "Not run yet"
         let summary = appModel.settings.lastCleanupSummary ?? "LoqBar has not run cleanup yet."
         return "Last run: \(lastRunText)\n\(summary)"
+    }
+
+    private var modelQualityGuidanceText: String {
+        let identifier = appModel.settings.normalizedTranscriptionModelIdentifier
+
+        if let suggestion = TranscriptionModelSuggestion.allCases.first(where: { $0.identifier == identifier }) {
+            let recommendation = suggestion.isRecommendedForCalls
+                ? "This is a good model family to try for call recordings."
+                : "This model is fine for fast drafts, but it is often too weak for noisy or split-source call audio."
+
+            return """
+            Current model: \(suggestion.title) (`\(suggestion.identifier)`)
+            \(suggestion.summary)
+            \(recommendation)
+            """
+        }
+
+        if identifier.isEmpty {
+            return """
+            No model identifier is set yet.
+            For call recordings, start with `small` if you want a better balance of speed and accuracy than `base`.
+            """
+        }
+
+        return """
+        Current model: `\(appModel.settings.transcriptionModelIdentifier)`
+        LoqBar will use this identifier as configured. For call recordings, `small` or `medium` usually produce better results than `base`.
+        """
     }
 
     private func pathField(

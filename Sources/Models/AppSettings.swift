@@ -37,6 +37,42 @@ enum TranscriptionLanguageOption: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum TranscriptionModelSuggestion: String, CaseIterable, Identifiable {
+    case base
+    case small
+    case medium
+
+    var id: Self { self }
+
+    var identifier: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .base:
+            return "Base"
+        case .small:
+            return "Small"
+        case .medium:
+            return "Medium"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .base:
+            return "Fastest, but the weakest choice for noisy calls and speaker overlap."
+        case .small:
+            return "Good quality/speed balance. Recommended first upgrade for call recordings."
+        case .medium:
+            return "Stronger recognition for difficult calls and accents, but slower and heavier."
+        }
+    }
+
+    var isRecommendedForCalls: Bool {
+        self == .small || self == .medium
+    }
+}
+
 struct AppSettings: Codable {
     var storageRootFolder: String
     var audioRetentionPolicy: AudioRetentionPolicy
@@ -117,6 +153,12 @@ struct AppSettings: Codable {
     var hasExternalTranscriptionPaths: Bool {
         !transcriptionExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
         !transcriptionModelPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var normalizedTranscriptionModelIdentifier: String {
+        transcriptionModelIdentifier
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 }
 
