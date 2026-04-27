@@ -235,7 +235,7 @@ struct SettingsView: View {
                     .labelsHidden()
                     .frame(maxWidth: 260, alignment: .leading)
 
-                    infoText("`Base` is fastest but weakest. `Small` is the best default for call recordings. `Medium` is stronger on noisy or difficult speech, but slower and heavier on your Mac.")
+                    infoText("`Base` is fastest but weakest. `Small` is the best default for call recordings. `Medium` is stronger on noisy or difficult speech. `Large` is the highest-quality option here, but it can be much slower and heavier on memory and CPU/GPU.")
                 }
             }
 

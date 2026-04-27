@@ -41,6 +41,7 @@ enum TranscriptionModelSuggestion: String, CaseIterable, Identifiable {
     case base
     case small
     case medium
+    case large
 
     var id: Self { self }
 
@@ -54,6 +55,8 @@ enum TranscriptionModelSuggestion: String, CaseIterable, Identifiable {
             return "Small"
         case .medium:
             return "Medium"
+        case .large:
+            return "Large"
         }
     }
 
@@ -65,11 +68,13 @@ enum TranscriptionModelSuggestion: String, CaseIterable, Identifiable {
             return "Good quality/speed balance. Recommended first upgrade for call recordings."
         case .medium:
             return "Stronger recognition for difficult calls and accents, but slower and heavier."
+        case .large:
+            return "Highest quality option in this picker, but also the slowest and heaviest on memory and processing."
         }
     }
 
     var isRecommendedForCalls: Bool {
-        self == .small || self == .medium
+        self == .small || self == .medium || self == .large
     }
 }
 
