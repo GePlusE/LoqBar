@@ -2,6 +2,7 @@ import Foundation
 
 struct TranscriptContent {
     let title: String
+    let language: String
     let segments: [TranscriptSegment]
     let speakersDetected: Int
     let warningCount: Int

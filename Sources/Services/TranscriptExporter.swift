@@ -98,7 +98,7 @@ struct TranscriptExporter {
         start_time: "\(timeFormatter.string(from: start))"
         end_time: "\(timeFormatter.string(from: end))"
         duration_seconds: \(session.durationSeconds)
-        language: \(session.language)
+        language: \(content.language)
         capture_mode: \(session.captureMode.rawValue)
         audio_source: \(session.audioSourceType.rawValue)
         speakers_detected: \(content.speakersDetected)

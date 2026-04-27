@@ -93,6 +93,7 @@ struct TranscriptionService {
 
         return TranscriptContent(
             title: session.title,
+            language: execution.language,
             segments: execution.segments,
             speakersDetected: execution.speakersDetected,
             warningCount: execution.segments.filter(\.lowConfidence).count,
@@ -105,23 +106,25 @@ struct TranscriptionService {
         plan: TranscriptionPlan,
         start: Date,
         configuration: WhisperConfiguration
-    ) throws -> (segments: [TranscriptSegment], speakersDetected: Int, summary: String, analysis: TranscriptionAnalysis) {
+    ) throws -> (segments: [TranscriptSegment], speakersDetected: Int, summary: String, analysis: TranscriptionAnalysis, language: String) {
         let merged = try transcribePreferredSources(plan: plan, sessionStart: start, configuration: configuration)
         let analysis = TranscriptionAnalysis(
             primarySources: plan.preferredSources.map(\.rawValue),
             notes: plan.notes,
             engineDescription: merged.engineDescription
         )
-        return (merged.segments, merged.speakersDetected, summaryText(for: plan, engineDescription: merged.engineDescription), analysis)
+        let resolvedLanguage = merged.language ?? configuration.language ?? "auto"
+        return (merged.segments, merged.speakersDetected, summaryText(for: plan, engineDescription: merged.engineDescription), analysis, resolvedLanguage)
     }
 
     private func transcribePreferredSources(
         plan: TranscriptionPlan,
         sessionStart: Date,
         configuration: WhisperConfiguration
-    ) throws -> (segments: [TranscriptSegment], speakersDetected: Int, engineDescription: String) {
+    ) throws -> (segments: [TranscriptSegment], speakersDetected: Int, engineDescription: String, language: String?) {
         var transcriptSegments: [TranscriptSegment] = []
         var engineDescription = "whisper-cli"
+        var detectedLanguage: String?
 
         for source in plan.preferredSources {
             let fileURL: URL?
@@ -140,6 +143,10 @@ struct TranscriptionService {
 
             let transcription = try whisperTranscriber.transcribe(audioFileURL: fileURL, configuration: configuration)
             engineDescription = transcription.engineDescription
+            if detectedLanguage == nil {
+                let normalizedLanguage = transcription.language?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                detectedLanguage = normalizedLanguage.isEmpty ? nil : normalizedLanguage
+            }
 
             let mappedSegments = transcription.segments.enumerated().map { index, segment in
                 TranscriptSegment(
@@ -164,7 +171,7 @@ struct TranscriptionService {
         }
 
         let speakersDetected = Set(sortedSegments.map(\.speakerLabel)).count
-        return (sortedSegments, max(speakersDetected, 1), engineDescription)
+        return (sortedSegments, max(speakersDetected, 1), engineDescription, detectedLanguage)
     }
 
     private func summaryText(for plan: TranscriptionPlan, engineDescription: String) -> String {

@@ -312,7 +312,14 @@ final class AppModel: ObservableObject {
     func renameSession(_ session: SessionRecord, title: String) {
         guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
         sessions[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? sessions[index].title
-        persist()
+        do {
+            try transcriptRevisionService.refreshTranscriptPresentation(for: sessions[index])
+            persist()
+        } catch let error as AppError {
+            present(error: error)
+        } catch {
+            present(error: .transcriptExportFailed("LoqBar could not refresh the transcript after renaming the session: \(error.localizedDescription)"))
+        }
     }
 
     func deleteSession(_ sessionID: UUID) {
@@ -343,7 +350,18 @@ final class AppModel: ObservableObject {
     func updateSessionTranscriptionLanguage(_ sessionID: UUID, language: String) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
         sessions[index].transcriptionLanguageOverride = language == TranscriptionLanguageOption.auto.rawValue ? nil : language
-        persist()
+        if language != TranscriptionLanguageOption.auto.rawValue {
+            sessions[index].language = language
+        }
+
+        do {
+            try transcriptRevisionService.refreshTranscriptPresentation(for: sessions[index])
+            persist()
+        } catch let error as AppError {
+            present(error: error)
+        } catch {
+            present(error: .transcriptExportFailed("LoqBar could not refresh the transcript after updating the transcription language: \(error.localizedDescription)"))
+        }
     }
 
     func retryTranscription(for sessionID: UUID) {
@@ -422,7 +440,7 @@ final class AppModel: ObservableObject {
         editedText: String
     ) {
         guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        guard let transcriptPath = sessions[index].transcriptPath else {
+        guard sessions[index].transcriptPath != nil else {
             present(error: .transcriptExportFailed("LoqBar could not find the transcript file to save your manual correction."))
             return
         }
@@ -446,11 +464,7 @@ final class AppModel: ObservableObject {
         }
 
         do {
-            try transcriptRevisionService.applyEdits(
-                to: transcriptPath,
-                edits: sessions[index].transcriptEdits,
-                speakerAssignments: sessions[index].speakerAssignments
-            )
+            try transcriptRevisionService.applyEdits(to: sessions[index])
             persist()
         } catch let error as AppError {
             present(error: error)
@@ -751,6 +765,7 @@ final class AppModel: ObservableObject {
                 session: sessions[sessionIndex],
                 settings: settings
             )
+            sessions[sessionIndex].language = content.language
             let transcript = try transcriptExporter.exportTranscript(
                 for: sessions[sessionIndex],
                 settings: settings,

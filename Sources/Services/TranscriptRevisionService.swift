@@ -39,31 +39,16 @@ struct TranscriptRevisionService {
     }
 
     func applyEdits(
-        to transcriptPath: String,
-        edits: [String: TranscriptEdit],
-        speakerAssignments: [String: String] = [:]
+        to session: SessionRecord
     ) throws {
-        let fileURL = URL(fileURLWithPath: transcriptPath)
-        let markdown = try String(contentsOf: fileURL, encoding: .utf8)
-        let rebuilt = try rewriteTranscriptSection(
-            in: markdown,
-            edits: edits,
-            speakerAssignments: speakerAssignments,
-            aliasMapping: [:]
-        )
-        try rebuilt.write(to: fileURL, atomically: true, encoding: .utf8)
+        try refreshTranscriptPresentation(for: session)
     }
 
     func refreshTranscriptPresentation(for session: SessionRecord) throws {
         guard let transcriptPath = session.transcriptPath else { return }
         let fileURL = URL(fileURLWithPath: transcriptPath)
         let markdown = try String(contentsOf: fileURL, encoding: .utf8)
-        let rebuilt = try rewriteTranscriptSection(
-            in: markdown,
-            edits: session.transcriptEdits,
-            speakerAssignments: session.speakerAssignments,
-            aliasMapping: session.aliasMapping
-        )
+        let rebuilt = try rewriteTranscriptSection(in: markdown, session: session)
         try rebuilt.write(to: fileURL, atomically: true, encoding: .utf8)
     }
 
@@ -73,9 +58,7 @@ struct TranscriptRevisionService {
 
     private func rewriteTranscriptSection(
         in markdown: String,
-        edits: [String: TranscriptEdit],
-        speakerAssignments: [String: String],
-        aliasMapping: [String: String]
+        session: SessionRecord
     ) throws -> String {
         let transcriptMarker = "# Transcript"
         let agentMarker = "# Agent Segments"
@@ -88,7 +71,7 @@ struct TranscriptRevisionService {
         let afterTranscript = markdown[transcriptRange.upperBound...]
         let agentRangeInTail = afterTranscript.range(of: agentMarker)
 
-        let header = String(markdown[..<transcriptRange.upperBound])
+        let header = String(markdown[..<transcriptRange.lowerBound])
         let transcriptBodyRaw: String
         let agentBodyRaw: String
         let analysisSuffix: String
@@ -113,11 +96,11 @@ struct TranscriptRevisionService {
         let segments = parseTranscriptSection(from: transcriptMarker + transcriptBodyRaw)
         let agentMetadata = parseAgentSegmentMetadata(from: agentBodyRaw)
         let rebuiltBody = segments.map { segment in
-            let activeEdit = edits[segment.key]
+            let activeEdit = session.transcriptEdits[segment.key]
             let currentText = activeEdit?.editedText ?? baseTranscriptText(for: segment)
             let originalText = activeEdit?.originalText ?? segment.originalText
-            let assignedSpeakerLabel = speakerAssignments[segment.key] ?? segment.assignedSpeakerLabel
-            let displaySpeaker = displaySpeakerName(for: assignedSpeakerLabel, aliasMapping: aliasMapping)
+            let assignedSpeakerLabel = session.speakerAssignments[segment.key] ?? segment.assignedSpeakerLabel
+            let displaySpeaker = displaySpeakerName(for: assignedSpeakerLabel, aliasMapping: session.aliasMapping)
             var lines = ["[\(segment.timestamp)] \(displaySpeaker): \(currentText)"]
 
             if displaySpeaker != assignedSpeakerLabel {
@@ -137,11 +120,11 @@ struct TranscriptRevisionService {
             return lines.joined(separator: "\n")
         }.joined(separator: "\n\n")
         let rebuiltAgentBody = segments.enumerated().map { index, segment in
-            let activeEdit = edits[segment.key]
+            let activeEdit = session.transcriptEdits[segment.key]
             let currentText = activeEdit?.editedText ?? baseTranscriptText(for: segment)
             let originalText = activeEdit?.originalText ?? segment.originalText
-            let assignedSpeakerLabel = speakerAssignments[segment.key] ?? segment.assignedSpeakerLabel
-            let speakerDisplay = displaySpeakerName(for: assignedSpeakerLabel, aliasMapping: aliasMapping)
+            let assignedSpeakerLabel = session.speakerAssignments[segment.key] ?? segment.assignedSpeakerLabel
+            let speakerDisplay = displaySpeakerName(for: assignedSpeakerLabel, aliasMapping: session.aliasMapping)
             let metadata = agentMetadata[segment.key]
             let segmentID = metadata?.id ?? String(format: "seg-%04d", index + 1)
             let source = metadata?.source ?? "unknown"
@@ -162,7 +145,7 @@ struct TranscriptRevisionService {
         let normalizedHeader = header.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedAnalysis = analysisSuffix.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let updatedHeader = rewriteSpeakerAliases(in: normalizedHeader, aliasMapping: aliasMapping)
+        let updatedHeader = rebuildHeader(from: normalizedHeader, session: session)
 
         if normalizedAnalysis.isEmpty {
             return "\(updatedHeader)\n\n\(rebuiltBody)\n\n# Agent Segments\n\n\(rebuiltAgentBody)\n"
@@ -297,40 +280,58 @@ struct TranscriptRevisionService {
         return alias.isEmpty ? speakerLabel : alias
     }
 
-    private func rewriteSpeakerAliases(in header: String, aliasMapping: [String: String]) -> String {
-        let lines = header.components(separatedBy: .newlines)
-        var updatedLines: [String] = []
-        var index = 0
+    private func rebuildHeader(from header: String, session: SessionRecord) -> String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
 
-        while index < lines.count {
-            let line = lines[index]
-            updatedLines.append(line)
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "HH:mm:ss"
 
-            if line == "speaker_aliases:" {
-                index += 1
+        let start = session.startedAt
+        let end = session.endedAt ?? start
+        let speakerAliases = session.speakerLabels.map { label in
+            "  \(label): \"\(escapeForYAML(session.aliasMapping[label] ?? ""))\""
+        }.joined(separator: "\n")
+        let preferredSources = headerValue(for: "preferred_transcript_sources", in: header) ?? ""
+        let transcriptionEngine = headerValue(for: "transcription_engine", in: header) ?? ""
+        let speakersDetected = max(session.speakerCount, session.speakerLabels.count)
 
-                while index < lines.count {
-                    let aliasLine = lines[index]
-                    guard aliasLine.hasPrefix("  Speaker") else {
-                        break
-                    }
+        return """
+        ---
+        schema_version: 2
+        title: \(session.title)
+        date: \(dateFormatter.string(from: start))
+        start_time: "\(timeFormatter.string(from: start))"
+        end_time: "\(timeFormatter.string(from: end))"
+        duration_seconds: \(session.durationSeconds)
+        language: \(session.language)
+        capture_mode: \(session.captureMode.rawValue)
+        audio_source: \(session.audioSourceType.rawValue)
+        speakers_detected: \(speakersDetected)
+        speaker_aliases:
+        \(speakerAliases.isEmpty ? "  {}" : speakerAliases)
+        confidence_warnings: \(session.warningCount)
+        manual_corrections: \(session.transcriptEdits.count)
+        speaker_reassignments: \(session.speakerAssignments.count)
+        audio_file: "\(escapeForYAML(session.audioPath ?? ""))"
+        system_audio_file: "\(escapeForYAML(session.systemAudioPath ?? ""))"
+        preferred_transcript_sources: "\(escapeForYAML(preferredSources))"
+        transcription_engine: "\(escapeForYAML(transcriptionEngine))"
+        ---
 
-                    let key = aliasLine
-                        .components(separatedBy: ":")
-                        .first?
-                        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    let aliasValue = aliasMapping[key] ?? ""
-                    updatedLines.append("  \(key): \"\(escapeForYAML(aliasValue))\"")
-                    index += 1
-                }
+        # Transcript
+        """
+    }
 
-                continue
-            }
-
-            index += 1
+    private func headerValue(for key: String, in header: String) -> String? {
+        let prefix = "\(key): "
+        for rawLine in header.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard line.hasPrefix(prefix) else { continue }
+            return cleanedValue(from: line, prefix: prefix)
         }
 
-        return updatedLines.joined(separator: "\n")
+        return nil
     }
 
     private func escapeForYAML(_ text: String) -> String {
