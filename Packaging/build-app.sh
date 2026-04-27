@@ -20,6 +20,7 @@ SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 RELEASE_FEED_URL="${RELEASE_FEED_URL:-https://api.github.com/repos/GePlusE/LoqBar/releases/latest}"
 RELEASE_PAGE_URL="${RELEASE_PAGE_URL:-https://github.com/GePlusE/LoqBar/releases}"
 MANAGED_WHISPER_EXECUTABLE_PATH="${MANAGED_WHISPER_EXECUTABLE_PATH:-$ROOT_DIR/tools/whisper.cpp/build/bin/whisper-cli}"
+MANAGED_WHISPER_LIBRARY_ROOT="${MANAGED_WHISPER_LIBRARY_ROOT:-$ROOT_DIR/tools/whisper.cpp/build}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$ROOT_DIR/dist}"
 BUILD_ROOT="$ROOT_DIR/.build/apple/$CONFIGURATION"
 APP_BUNDLE="$OUTPUT_ROOT/$APP_NAME.app"
@@ -73,8 +74,26 @@ fi
 
 if [[ -x "$MANAGED_WHISPER_EXECUTABLE_PATH" ]]; then
   mkdir -p "$APP_BUNDLE/Contents/Resources/ManagedTranscription"
+  mkdir -p "$APP_BUNDLE/Contents/Resources/ManagedTranscription/lib"
   cp "$MANAGED_WHISPER_EXECUTABLE_PATH" "$APP_BUNDLE/Contents/Resources/ManagedTranscription/whisper-cli"
   chmod +x "$APP_BUNDLE/Contents/Resources/ManagedTranscription/whisper-cli"
+
+  for library_path in \
+    "$MANAGED_WHISPER_LIBRARY_ROOT/src/libwhisper.1.dylib" \
+    "$MANAGED_WHISPER_LIBRARY_ROOT/ggml/src/libggml.0.dylib" \
+    "$MANAGED_WHISPER_LIBRARY_ROOT/ggml/src/libggml-cpu.0.dylib" \
+    "$MANAGED_WHISPER_LIBRARY_ROOT/ggml/src/libggml-base.0.dylib" \
+    "$MANAGED_WHISPER_LIBRARY_ROOT/ggml/src/ggml-blas/libggml-blas.0.dylib" \
+    "$MANAGED_WHISPER_LIBRARY_ROOT/ggml/src/ggml-metal/libggml-metal.0.dylib"
+  do
+    if [[ -f "$library_path" ]]; then
+      cp -L "$library_path" "$APP_BUNDLE/Contents/Resources/ManagedTranscription/lib/$(basename "$library_path")"
+    else
+      echo "Warning: expected managed library is missing:"
+      echo "  $library_path"
+    fi
+  done
+
   echo "Bundled managed whisper-cli from:"
   echo "  $MANAGED_WHISPER_EXECUTABLE_PATH"
 else

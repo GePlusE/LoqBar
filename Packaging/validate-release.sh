@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_BUNDLE="${APP_BUNDLE:-$ROOT_DIR/dist/LoqBar.app}"
 ZIP_PATH="${ZIP_PATH:-$ROOT_DIR/dist/LoqBar.zip}"
 MANAGED_EXECUTABLE_IN_BUNDLE="$APP_BUNDLE/Contents/Resources/ManagedTranscription/whisper-cli"
+MANAGED_LIBRARY_ROOT="$APP_BUNDLE/Contents/Resources/ManagedTranscription/lib"
 
 if [[ ! -d "$APP_BUNDLE" ]]; then
   echo "Missing app bundle: $APP_BUNDLE" >&2
@@ -37,6 +38,21 @@ if [[ -x "$MANAGED_EXECUTABLE_IN_BUNDLE" ]]; then
 else
   echo "Warning: managed whisper-cli is not bundled in the app."
 fi
+
+for library_name in \
+  libwhisper.1.dylib \
+  libggml.0.dylib \
+  libggml-cpu.0.dylib \
+  libggml-blas.0.dylib \
+  libggml-metal.0.dylib \
+  libggml-base.0.dylib
+do
+  if [[ -f "$MANAGED_LIBRARY_ROOT/$library_name" ]]; then
+    echo "Bundled managed library: $library_name"
+  else
+    echo "Warning: missing bundled managed library: $library_name"
+  fi
+done
 
 echo
 echo "Validation complete:"
