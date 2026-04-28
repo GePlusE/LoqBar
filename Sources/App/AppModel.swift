@@ -391,38 +391,12 @@ final class AppModel: ObservableObject {
         guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
         sessions[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? sessions[index].title
         do {
-            try transcriptRevisionService.refreshTranscriptPresentation(for: sessions[index])
+            try refreshTranscriptPresentation(for: sessions[index])
             persist()
         } catch let error as AppError {
             present(error: error)
         } catch {
             present(error: .transcriptExportFailed("LoqBar could not refresh the transcript after renaming the session: \(error.localizedDescription)"))
-        }
-    }
-
-    func deleteSession(_ sessionID: UUID) {
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        let session = sessions[index]
-
-        guard !session.isRecording else {
-            present(error: .sessionDeletionFailed("Stop the active recording before deleting this session."))
-            return
-        }
-
-        guard !session.isProcessing else {
-            present(error: .sessionDeletionFailed("Wait for the current transcription/export work to finish before deleting this session."))
-            return
-        }
-
-        do {
-            try sessionStore.deleteArtifacts(for: session)
-            sessions.remove(at: index)
-            isLocalMicCapturePaused = false
-            persist()
-        } catch let error as AppError {
-            present(error: error)
-        } catch {
-            present(error: .sessionDeletionFailed("LoqBar could not delete this session: \(error.localizedDescription)"))
         }
     }
 
@@ -434,7 +408,7 @@ final class AppModel: ObservableObject {
         }
 
         do {
-            try transcriptRevisionService.refreshTranscriptPresentation(for: sessions[index])
+            try refreshTranscriptPresentation(for: sessions[index])
             persist()
         } catch let error as AppError {
             present(error: error)
@@ -443,54 +417,16 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func retryTranscription(for sessionID: UUID) {
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        guard !sessions[index].isRecording else { return }
-        guard !sessions[index].isProcessing else { return }
-        guard sessions[index].audioPath != nil || sessions[index].systemAudioPath != nil else {
-            present(error: .transcriptionExecutionFailed("This session does not have any saved audio files to transcribe yet."))
-            return
-        }
-
-        sessions[index].status = .processing
-        sessions[index].notes = "Retrying transcription..."
-        processingMessage = "Processing in background"
-        persist()
-
-        startBackgroundProcessing(
-            for: BackgroundProcessingRequest(
-                session: sessions[index],
-                captureSummary: sessions[index].notes,
-                notePrefix: nil,
-                shouldOptimizeAudio: false
-            )
-        )
-    }
-
     func updateAlias(for session: SessionRecord, speakerLabel: String, alias: String) {
         guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
         sessions[index].aliasMapping[speakerLabel] = alias.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            try transcriptRevisionService.refreshTranscriptPresentation(for: sessions[index])
+            try refreshTranscriptPresentation(for: sessions[index])
             persist()
         } catch let error as AppError {
             present(error: error)
         } catch {
             present(error: .transcriptExportFailed("LoqBar could not refresh the transcript after updating speaker aliases: \(error.localizedDescription)"))
-        }
-    }
-
-    func addSpeakerSlot(to sessionID: UUID) {
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        sessions[index].speakerCount = max(sessions[index].speakerCount + 1, 1)
-
-        do {
-            try transcriptRevisionService.refreshTranscriptPresentation(for: sessions[index])
-            persist()
-        } catch let error as AppError {
-            present(error: error)
-        } catch {
-            present(error: .transcriptExportFailed("LoqBar could not refresh the transcript after adding another speaker slot: \(error.localizedDescription)"))
         }
     }
 
@@ -509,82 +445,13 @@ final class AppModel: ObservableObject {
         }
 
         do {
-            try transcriptRevisionService.refreshTranscriptPresentation(for: sessions[index])
+            try refreshTranscriptPresentation(for: sessions[index])
             persist()
         } catch let error as AppError {
             present(error: error)
         } catch {
             present(error: .transcriptExportFailed("LoqBar could not refresh the transcript after changing the speaker assignment: \(error.localizedDescription)"))
         }
-    }
-
-    func editableTranscriptSegments(for session: SessionRecord) -> [EditableTranscriptSegment] {
-        guard let transcriptPath = session.transcriptPath else { return [] }
-        return transcriptRevisionService.loadEditableSegments(from: transcriptPath, session: session)
-    }
-
-    func updateTranscriptSegment(
-        for sessionID: UUID,
-        segmentKey: String,
-        originalText: String,
-        editedText: String
-    ) {
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-        guard sessions[index].transcriptPath != nil else {
-            present(error: .transcriptExportFailed("LoqBar could not find the transcript file to save your manual correction."))
-            return
-        }
-
-        let normalizedOriginal = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedEdited = editedText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if normalizedEdited.isEmpty {
-            present(error: .transcriptExportFailed("Manual transcript corrections cannot be empty."))
-            return
-        }
-
-        if normalizedEdited == normalizedOriginal {
-            sessions[index].transcriptEdits.removeValue(forKey: segmentKey)
-        } else {
-            sessions[index].transcriptEdits[segmentKey] = TranscriptEdit(
-                originalText: normalizedOriginal,
-                editedText: normalizedEdited,
-                editedAt: Date()
-            )
-        }
-
-        do {
-            try transcriptRevisionService.applyEdits(to: sessions[index])
-            persist()
-        } catch let error as AppError {
-            present(error: error)
-        } catch {
-            present(error: .transcriptExportFailed("LoqBar could not save the transcript correction: \(error.localizedDescription)"))
-        }
-    }
-
-    func updateSessionContext(
-        for sessionID: UUID,
-        sharedLinks: String,
-        contextNotes: String
-    ) {
-        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
-
-        sessions[index].sharedLinks = sharedLinks.trimmingCharacters(in: .whitespacesAndNewlines)
-        sessions[index].contextNotes = contextNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        do {
-            try transcriptRevisionService.refreshTranscriptPresentation(for: sessions[index])
-            persist()
-        } catch let error as AppError {
-            present(error: error)
-        } catch {
-            present(error: .transcriptExportFailed("LoqBar could not refresh the transcript after saving session context: \(error.localizedDescription)"))
-        }
-    }
-
-    func dismissAlert() {
-        alertContext = nil
     }
 
     func persist() {
@@ -597,6 +464,23 @@ final class AppModel: ObservableObject {
             title: error.title,
             message: error.recoverySuggestion
         )
+    }
+
+    func dismissAlert() {
+        alertContext = nil
+    }
+
+    func refreshTranscriptPresentation(for session: SessionRecord) throws {
+        try transcriptRevisionService.refreshTranscriptPresentation(for: session)
+    }
+
+    func applyTranscriptEdits(to session: SessionRecord) throws {
+        try transcriptRevisionService.applyEdits(to: session)
+    }
+
+    func loadEditableTranscriptSegments(for session: SessionRecord) -> [EditableTranscriptSegment] {
+        guard let transcriptPath = session.transcriptPath else { return [] }
+        return transcriptRevisionService.loadEditableSegments(from: transcriptPath, session: session)
     }
 
     private func apply(
@@ -644,7 +528,7 @@ final class AppModel: ObservableObject {
         )
     }
 
-    private func startBackgroundProcessing(for request: BackgroundProcessingRequest) {
+    func startBackgroundProcessing(for request: BackgroundProcessingRequest) {
         let settingsSnapshot = settings
 
         Task.detached(priority: .userInitiated) {
@@ -845,7 +729,7 @@ final class AppModel: ObservableObject {
     }
 }
 
-private struct BackgroundProcessingRequest: Sendable {
+struct BackgroundProcessingRequest: Sendable {
     let session: SessionRecord
     let captureSummary: String
     let notePrefix: String?
