@@ -25,6 +25,14 @@ final class AudioCaptureCoordinator {
         activeCapture != nil
     }
 
+    var hasMicrophoneCapture: Bool {
+        activeCapture?.microphoneRecorder != nil
+    }
+
+    var isMicrophonePaused: Bool {
+        activeCapture?.microphoneRecorder?.isPaused ?? false
+    }
+
     func start(
         sessionID: UUID,
         mode: CaptureMode,
@@ -120,6 +128,14 @@ final class AudioCaptureCoordinator {
         }
         return capture
     }
+
+    func setMicrophonePaused(_ paused: Bool) throws {
+        guard let recorder = activeCapture?.microphoneRecorder else {
+            throw AppError.recordingStopFailed("No active microphone capture is available to pause or resume.")
+        }
+
+        recorder.setPaused(paused)
+    }
 }
 
 struct ActiveCaptureSession {
@@ -157,6 +173,7 @@ final class MicrophoneRecorder {
     private let interruptionHandler: (CaptureInterruptionReason) -> Void
     private var audioFile: AVAudioFile?
     private var isRecording = false
+    private(set) var isPaused = false
 
     init(outputURL: URL, interruptionHandler: @escaping (CaptureInterruptionReason) -> Void) {
         self.outputURL = outputURL
@@ -188,7 +205,11 @@ final class MicrophoneRecorder {
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: fileFormat) { [weak self] buffer, _ in
             guard let self, let audioFile = self.audioFile else { return }
             do {
-                try audioFile.write(from: buffer)
+                if self.isPaused {
+                    try audioFile.write(from: try self.makeSilentBuffer(matching: buffer))
+                } else {
+                    try audioFile.write(from: buffer)
+                }
             } catch {
                 NSLog("LoqBar microphone write failed: \(error.localizedDescription)")
             }
@@ -216,12 +237,37 @@ final class MicrophoneRecorder {
         engine.stop()
         audioFile = nil
         isRecording = false
+        isPaused = false
+    }
+
+    func setPaused(_ paused: Bool) {
+        guard isRecording else { return }
+        isPaused = paused
     }
 
     @objc
     private func handleEngineConfigurationChange() {
         guard isRecording else { return }
         interruptionHandler(.microphoneConfigurationChanged)
+    }
+
+    private func makeSilentBuffer(matching buffer: AVAudioPCMBuffer) throws -> AVAudioPCMBuffer {
+        guard let silentBuffer = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: buffer.frameLength) else {
+            throw AppError.recordingStopFailed("LoqBar could not allocate a silent microphone buffer while pausing local capture.")
+        }
+
+        silentBuffer.frameLength = buffer.frameLength
+
+        if let channelData = silentBuffer.floatChannelData {
+            let channelCount = Int(buffer.format.channelCount)
+            let frameCount = Int(buffer.frameLength)
+
+            for channel in 0..<channelCount {
+                channelData[channel].initialize(repeating: 0, count: frameCount)
+            }
+        }
+
+        return silentBuffer
     }
 }
 

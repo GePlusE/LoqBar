@@ -14,6 +14,7 @@ final class AppModel: ObservableObject {
     @Published var updateStatus = UpdateStatusSummary.idle
     @Published var managedTranscriptionInstallStatus = "Managed transcription is not installing right now."
     @Published var isInstallingManagedTranscription = false
+    @Published var isLocalMicCapturePaused = false
 
     private let permissionsService: PermissionsService
     private let loginItemService: LoginItemService
@@ -83,6 +84,10 @@ final class AppModel: ObservableObject {
 
     var isRecordingInMenuBar: Bool {
         activeSession != nil || recordingCoordinator.hasActiveCapture
+    }
+
+    var canToggleLocalMicCapture: Bool {
+        recordingCoordinator.hasMicrophoneCapture && activeSession != nil
     }
 
     var transcriptionSetupStatus: TranscriptionSetupStatus {
@@ -208,9 +213,11 @@ final class AppModel: ObservableObject {
                 )
                 await MainActor.run {
                     apply(activeCapture, to: session.id, fallbackNote: capturePlan.userFacingSummary)
+                    isLocalMicCapturePaused = false
                 }
             } catch {
                 await MainActor.run {
+                    isLocalMicCapturePaused = false
                     markSessionFailed(session.id, error: .recordingStartupFailed(error.localizedDescription))
                 }
             }
@@ -262,9 +269,11 @@ final class AppModel: ObservableObject {
                 )
                 await MainActor.run {
                     apply(activeCapture, to: session.id, fallbackNote: capturePlan.userFacingSummary)
+                    isLocalMicCapturePaused = false
                 }
             } catch {
                 await MainActor.run {
+                    isLocalMicCapturePaused = false
                     markSessionFailed(session.id, error: .recordingStartupFailed(error.localizedDescription))
                 }
             }
@@ -308,6 +317,19 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func toggleLocalMicCapture() {
+        let nextPausedState = !isLocalMicCapturePaused
+
+        do {
+            try recordingCoordinator.setMicrophonePaused(nextPausedState)
+            isLocalMicCapturePaused = nextPausedState
+        } catch let error as AppError {
+            present(error: error)
+        } catch {
+            present(error: .recordingStopFailed("LoqBar could not update local microphone capture: \(error.localizedDescription)"))
+        }
+    }
+
     func renameSession(_ session: SessionRecord, title: String) {
         guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
         sessions[index].title = title.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? sessions[index].title
@@ -338,6 +360,7 @@ final class AppModel: ObservableObject {
         do {
             try sessionStore.deleteArtifacts(for: session)
             sessions.remove(at: index)
+            isLocalMicCapturePaused = false
             persist()
         } catch let error as AppError {
             present(error: error)
@@ -755,6 +778,7 @@ final class AppModel: ObservableObject {
         sessions[sessionIndex].audioPath = capture.microphoneFileURL?.path
         sessions[sessionIndex].systemAudioPath = capture.systemAudioFileURL?.path
         sessions[sessionIndex].notes = capture.summary
+        isLocalMicCapturePaused = false
         processingMessage = "Processing in background"
         persist()
 
@@ -796,6 +820,7 @@ final class AppModel: ObservableObject {
             sessions[sessionIndex].language = result.language
             persist()
             processingMessage = hasProcessingSessions ? "Processing in background" : "Transcript exported"
+            isLocalMicCapturePaused = false
             runRetentionCleanupIfNeeded()
 
         case let .transcriptionPending(result):
@@ -807,6 +832,7 @@ final class AppModel: ObservableObject {
             sessions[sessionIndex].notes = result.note
             persist()
             processingMessage = hasProcessingSessions ? "Processing in background" : "Recording saved, transcription pending"
+            isLocalMicCapturePaused = false
             present(error: result.error)
         }
     }
@@ -923,6 +949,7 @@ final class AppModel: ObservableObject {
         if let index = sessions.firstIndex(where: { $0.id == sessionID }) {
             sessions[index].status = .failed
             sessions[index].notes = error.recoverySuggestion
+            isLocalMicCapturePaused = false
             persist()
         }
         present(error: error)
@@ -932,6 +959,7 @@ final class AppModel: ObservableObject {
         if let index = sessions.firstIndex(where: { $0.id == sessionID }) {
             sessions[index].status = .completed
             sessions[index].notes = "Recording saved. Transcription pending: \(error.recoverySuggestion)"
+            isLocalMicCapturePaused = false
             persist()
         }
         processingMessage = hasProcessingSessions ? "Processing in background" : "Recording saved, transcription pending"

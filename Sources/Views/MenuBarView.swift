@@ -70,14 +70,23 @@ struct MenuBarView: View {
     }
 
     private var controls: some View {
-        Button(appModel.activeSession == nil ? "Start" : "Stop") {
-            if appModel.activeSession == nil {
-                appModel.startRecording()
-            } else {
-                appModel.stopRecording()
+        VStack(alignment: .leading, spacing: 10) {
+            Button(appModel.activeSession == nil ? "Start" : "Stop") {
+                if appModel.activeSession == nil {
+                    appModel.startRecording()
+                } else {
+                    appModel.stopRecording()
+                }
+            }
+            .buttonStyle(.borderedProminent)
+
+            if appModel.canToggleLocalMicCapture {
+                Button(appModel.isLocalMicCapturePaused ? "Resume Mic" : "Pause Mic") {
+                    appModel.toggleLocalMicCapture()
+                }
+                .buttonStyle(.bordered)
             }
         }
-        .buttonStyle(.borderedProminent)
     }
 
     private var quickActions: some View {
