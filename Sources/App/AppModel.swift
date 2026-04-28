@@ -15,6 +15,8 @@ final class AppModel: ObservableObject {
     @Published var managedTranscriptionInstallStatus = "Managed transcription is not installing right now."
     @Published var isInstallingManagedTranscription = false
     @Published var isLocalMicCapturePaused = false
+    private var recentlyUpdatedToVersion: String?
+    private var hasShownPostUpdatePermissionHint = false
 
     private let permissionsService: PermissionsService
     private let loginItemService: LoginItemService
@@ -113,17 +115,24 @@ final class AppModel: ObservableObject {
     func loadInitialState() {
         settings = sessionStore.loadSettings()
         sessions = sessionStore.loadSessions()
+        let currentVersion = currentAppVersionDisplay
+        let previousVersion = settings.lastLaunchedAppVersion
+        recentlyUpdatedToVersion = previousVersion != nil && previousVersion != currentVersion ? currentVersion : nil
+        settings.lastLaunchedAppVersion = currentVersion
         permissionState = permissionsService.currentState()
         firstRunState = FirstRunState(
             needsOnboarding: !settings.firstRunCompleted,
             launchAtLogin: settings.launchAtLoginEnabled
         )
         managedTranscriptionInstallStatus = transcriptionSetupStatus.message
+        sessionStore.save(settings: settings)
+        showPostUpdatePermissionRepairHintIfNeeded()
         runRetentionCleanupIfNeeded()
     }
 
     func refreshPermissions() {
         permissionState = permissionsService.currentState()
+        showPostUpdatePermissionRepairHintIfNeeded()
     }
 
     func resetScreenCapturePermission() {
@@ -978,6 +987,30 @@ final class AppModel: ObservableObject {
         }
         processingMessage = hasProcessingSessions ? "Processing in background" : "Recording saved, transcription pending"
         present(error: error)
+    }
+
+    private func showPostUpdatePermissionRepairHintIfNeeded() {
+        guard
+            let updatedVersion = recentlyUpdatedToVersion,
+            !hasShownPostUpdatePermissionHint,
+            settings.firstRunCompleted,
+            !permissionState.screenCaptureAuthorized
+        else {
+            if permissionState.screenCaptureAuthorized {
+                recentlyUpdatedToVersion = nil
+            }
+            return
+        }
+
+        hasShownPostUpdatePermissionHint = true
+        alertContext = AlertContext(
+            title: "Check Screen Permission After Update",
+            message: """
+            LoqBar was updated to \(updatedVersion). After manually replacing a Mac app, macOS can sometimes keep stale Screen Recording permission state.
+
+            If Remote mode looks unavailable even though System Settings shows LoqBar enabled, open Preferences > General and use Reset Screen Permission. Then allow the prompt again and relaunch LoqBar once if needed.
+            """
+        )
     }
 }
 

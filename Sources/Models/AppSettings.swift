@@ -122,6 +122,24 @@ struct AppSettings: Codable, Sendable {
     var lastCleanupSummary: String?
     var launchAtLoginEnabled: Bool
     var firstRunCompleted: Bool
+    var lastLaunchedAppVersion: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case storageRootFolder
+        case audioRetentionPolicy
+        case defaultCaptureMode
+        case customVocabularyEntries
+        case transcriptionModelIdentifier
+        case transcriptionExecutablePath
+        case transcriptionModelPath
+        case transcriptionLanguage
+        case autoCleanupEnabled
+        case lastCleanupAt
+        case lastCleanupSummary
+        case launchAtLoginEnabled
+        case firstRunCompleted
+        case lastLaunchedAppVersion
+    }
 
     static let defaultValue = AppSettings(
         storageRootFolder: StoragePaths.defaultStorageRootFolder.path,
@@ -136,8 +154,41 @@ struct AppSettings: Codable, Sendable {
         lastCleanupAt: nil,
         lastCleanupSummary: nil,
         launchAtLoginEnabled: false,
-        firstRunCompleted: false
+        firstRunCompleted: false,
+        lastLaunchedAppVersion: nil
     )
+
+    init(
+        storageRootFolder: String,
+        audioRetentionPolicy: AudioRetentionPolicy,
+        defaultCaptureMode: CaptureMode,
+        customVocabularyEntries: [String],
+        transcriptionModelIdentifier: String,
+        transcriptionExecutablePath: String,
+        transcriptionModelPath: String,
+        transcriptionLanguage: String,
+        autoCleanupEnabled: Bool,
+        lastCleanupAt: Date?,
+        lastCleanupSummary: String?,
+        launchAtLoginEnabled: Bool,
+        firstRunCompleted: Bool,
+        lastLaunchedAppVersion: String?
+    ) {
+        self.storageRootFolder = storageRootFolder
+        self.audioRetentionPolicy = audioRetentionPolicy
+        self.defaultCaptureMode = defaultCaptureMode
+        self.customVocabularyEntries = customVocabularyEntries
+        self.transcriptionModelIdentifier = transcriptionModelIdentifier
+        self.transcriptionExecutablePath = transcriptionExecutablePath
+        self.transcriptionModelPath = transcriptionModelPath
+        self.transcriptionLanguage = transcriptionLanguage
+        self.autoCleanupEnabled = autoCleanupEnabled
+        self.lastCleanupAt = lastCleanupAt
+        self.lastCleanupSummary = lastCleanupSummary
+        self.launchAtLoginEnabled = launchAtLoginEnabled
+        self.firstRunCompleted = firstRunCompleted
+        self.lastLaunchedAppVersion = lastLaunchedAppVersion
+    }
 
     var transcriptOutputFolder: String {
         URL(fileURLWithPath: storageRootFolder, isDirectory: true)
@@ -202,6 +253,24 @@ struct AppSettings: Codable, Sendable {
 
     var selectedModelSuggestion: TranscriptionModelSuggestion? {
         TranscriptionModelSuggestion.allCases.first { $0.identifier == normalizedTranscriptionModelIdentifier }
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        storageRootFolder = try container.decodeIfPresent(String.self, forKey: .storageRootFolder) ?? AppSettings.defaultValue.storageRootFolder
+        audioRetentionPolicy = try container.decodeIfPresent(AudioRetentionPolicy.self, forKey: .audioRetentionPolicy) ?? AppSettings.defaultValue.audioRetentionPolicy
+        defaultCaptureMode = try container.decodeIfPresent(CaptureMode.self, forKey: .defaultCaptureMode) ?? AppSettings.defaultValue.defaultCaptureMode
+        customVocabularyEntries = try container.decodeIfPresent([String].self, forKey: .customVocabularyEntries) ?? AppSettings.defaultValue.customVocabularyEntries
+        transcriptionModelIdentifier = try container.decodeIfPresent(String.self, forKey: .transcriptionModelIdentifier) ?? AppSettings.defaultValue.transcriptionModelIdentifier
+        transcriptionExecutablePath = try container.decodeIfPresent(String.self, forKey: .transcriptionExecutablePath) ?? AppSettings.defaultValue.transcriptionExecutablePath
+        transcriptionModelPath = try container.decodeIfPresent(String.self, forKey: .transcriptionModelPath) ?? AppSettings.defaultValue.transcriptionModelPath
+        transcriptionLanguage = try container.decodeIfPresent(String.self, forKey: .transcriptionLanguage) ?? AppSettings.defaultValue.transcriptionLanguage
+        autoCleanupEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoCleanupEnabled) ?? AppSettings.defaultValue.autoCleanupEnabled
+        lastCleanupAt = try container.decodeIfPresent(Date.self, forKey: .lastCleanupAt)
+        lastCleanupSummary = try container.decodeIfPresent(String.self, forKey: .lastCleanupSummary)
+        launchAtLoginEnabled = try container.decodeIfPresent(Bool.self, forKey: .launchAtLoginEnabled) ?? AppSettings.defaultValue.launchAtLoginEnabled
+        firstRunCompleted = try container.decodeIfPresent(Bool.self, forKey: .firstRunCompleted) ?? AppSettings.defaultValue.firstRunCompleted
+        lastLaunchedAppVersion = try container.decodeIfPresent(String.self, forKey: .lastLaunchedAppVersion)
     }
 }
 
