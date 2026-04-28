@@ -168,7 +168,6 @@ struct SettingsView: View {
                 body: """
                 Current version: \(appModel.currentAppVersionDisplay)
                 Status: \(appModel.updateStatus.title)
-                Release feed: \(appModel.updateSourceSummary)
                 """
             )
 
