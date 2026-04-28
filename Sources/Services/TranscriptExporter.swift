@@ -89,6 +89,7 @@ struct TranscriptExporter {
         let speakerAliases = session.speakerLabels.map { label in
             "  \(label): \"\(escapeForYAML(session.aliasMapping[label] ?? ""))\""
         }.joined(separator: "\n")
+        let contextSection = buildSessionContextSection(for: session)
 
         return """
         ---
@@ -107,6 +108,8 @@ struct TranscriptExporter {
         confidence_warnings: \(content.warningCount)
         manual_corrections: \(manualCorrectionCount)
         speaker_reassignments: \(speakerReassignmentCount)
+        shared_links_present: \(session.sharedLinks.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+        context_notes_present: \(session.contextNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
         audio_file: "\(session.audioPath ?? "")"
         system_audio_file: "\(session.systemAudioPath ?? "")"
         preferred_transcript_sources: "\(sourceSummary)"
@@ -120,6 +123,8 @@ struct TranscriptExporter {
         # Agent Segments
 
         \(agentSegmentsBody)
+
+        \(contextSection)
 
         # Analysis Notes
 
@@ -148,6 +153,27 @@ struct TranscriptExporter {
     private func displaySpeakerName(for speakerLabel: String, aliases: [String: String]) -> String {
         let alias = aliases[speakerLabel]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return alias.isEmpty ? speakerLabel : alias
+    }
+
+    private func buildSessionContextSection(for session: SessionRecord) -> String {
+        let sharedLinks = session.sharedLinks.trimmingCharacters(in: .whitespacesAndNewlines)
+        let contextNotes = session.contextNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !sharedLinks.isEmpty || !contextNotes.isEmpty else {
+            return "# Session Context\n\n_No additional context was added._"
+        }
+
+        var sections = ["# Session Context"]
+
+        if !sharedLinks.isEmpty {
+            sections.append("## Shared Links / References\n\n\(sharedLinks)")
+        }
+
+        if !contextNotes.isEmpty {
+            sections.append("## Additional Context / Notes\n\n\(contextNotes)")
+        }
+
+        return sections.joined(separator: "\n\n")
     }
 
     private func escapeForYAML(_ text: String) -> String {

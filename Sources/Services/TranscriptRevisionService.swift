@@ -62,6 +62,7 @@ struct TranscriptRevisionService {
     ) throws -> String {
         let transcriptMarker = "# Transcript"
         let agentMarker = "# Agent Segments"
+        let contextMarker = "# Session Context"
         let analysisMarker = "# Analysis Notes"
 
         guard let transcriptRange = markdown.range(of: transcriptMarker) else {
@@ -74,23 +75,32 @@ struct TranscriptRevisionService {
         let header = String(markdown[..<transcriptRange.lowerBound])
         let transcriptBodyRaw: String
         let agentBodyRaw: String
-        let analysisSuffix: String
+        let analysisBodyRaw: String
 
         if let agentRangeInTail {
             transcriptBodyRaw = String(afterTranscript[..<agentRangeInTail.lowerBound])
             let afterAgent = afterTranscript[agentRangeInTail.upperBound...]
 
-            if let analysisRangeAfterAgent = afterAgent.range(of: analysisMarker) {
+            if let contextRangeAfterAgent = afterAgent.range(of: contextMarker) {
+                agentBodyRaw = String(afterAgent[..<contextRangeAfterAgent.lowerBound])
+                let afterContext = afterAgent[contextRangeAfterAgent.upperBound...]
+
+                if let analysisRangeAfterContext = afterContext.range(of: analysisMarker) {
+                    analysisBodyRaw = String(afterContext[analysisRangeAfterContext.upperBound...])
+                } else {
+                    analysisBodyRaw = ""
+                }
+            } else if let analysisRangeAfterAgent = afterAgent.range(of: analysisMarker) {
                 agentBodyRaw = String(afterAgent[..<analysisRangeAfterAgent.lowerBound])
-                analysisSuffix = String(afterAgent[analysisRangeAfterAgent.lowerBound...])
+                analysisBodyRaw = String(afterAgent[analysisRangeAfterAgent.upperBound...])
             } else {
                 agentBodyRaw = String(afterAgent)
-                analysisSuffix = ""
+                analysisBodyRaw = ""
             }
         } else {
             transcriptBodyRaw = String(afterTranscript)
             agentBodyRaw = ""
-            analysisSuffix = ""
+            analysisBodyRaw = ""
         }
 
         let segments = parseTranscriptSection(from: transcriptMarker + transcriptBodyRaw)
@@ -143,15 +153,16 @@ struct TranscriptRevisionService {
         }.joined(separator: "\n")
 
         let normalizedHeader = header.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedAnalysis = analysisSuffix.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedAnalysis = analysisBodyRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rebuiltContext = buildSessionContextSection(for: session)
 
         let updatedHeader = rebuildHeader(from: normalizedHeader, session: session)
 
         if normalizedAnalysis.isEmpty {
-            return "\(updatedHeader)\n\n\(rebuiltBody)\n\n# Agent Segments\n\n\(rebuiltAgentBody)\n"
+            return "\(updatedHeader)\n\n\(rebuiltBody)\n\n# Agent Segments\n\n\(rebuiltAgentBody)\n\n\(rebuiltContext)\n"
         }
 
-        return "\(updatedHeader)\n\n\(rebuiltBody)\n\n# Agent Segments\n\n\(rebuiltAgentBody)\n\n\(normalizedAnalysis)\n"
+        return "\(updatedHeader)\n\n\(rebuiltBody)\n\n# Agent Segments\n\n\(rebuiltAgentBody)\n\n\(rebuiltContext)\n\n# Analysis Notes\n\n\(normalizedAnalysis)\n"
     }
 
     private func parseTranscriptSection(from markdown: String) -> [EditableTranscriptSegment] {
@@ -313,6 +324,8 @@ struct TranscriptRevisionService {
         confidence_warnings: \(session.warningCount)
         manual_corrections: \(session.transcriptEdits.count)
         speaker_reassignments: \(session.speakerAssignments.count)
+        shared_links_present: \(session.sharedLinks.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+        context_notes_present: \(session.contextNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
         audio_file: "\(escapeForYAML(session.audioPath ?? ""))"
         system_audio_file: "\(escapeForYAML(session.systemAudioPath ?? ""))"
         preferred_transcript_sources: "\(escapeForYAML(preferredSources))"
@@ -321,6 +334,27 @@ struct TranscriptRevisionService {
 
         # Transcript
         """
+    }
+
+    private func buildSessionContextSection(for session: SessionRecord) -> String {
+        let sharedLinks = session.sharedLinks.trimmingCharacters(in: .whitespacesAndNewlines)
+        let contextNotes = session.contextNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !sharedLinks.isEmpty || !contextNotes.isEmpty else {
+            return "# Session Context\n\n_No additional context was added._"
+        }
+
+        var sections = ["# Session Context"]
+
+        if !sharedLinks.isEmpty {
+            sections.append("## Shared Links / References\n\n\(sharedLinks)")
+        }
+
+        if !contextNotes.isEmpty {
+            sections.append("## Additional Context / Notes\n\n\(contextNotes)")
+        }
+
+        return sections.joined(separator: "\n\n")
     }
 
     private func headerValue(for key: String, in header: String) -> String? {

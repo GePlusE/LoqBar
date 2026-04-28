@@ -148,7 +148,7 @@ struct SessionHistoryView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            TextField("Search title, notes, transcript, or participants", text: $searchText)
+            TextField("Search title, status, transcript, participants, or context", text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .padding(.top, 6)
 
@@ -310,6 +310,8 @@ struct SessionHistoryView: View {
         let haystack = [
             session.title.lowercased(),
             session.notes.lowercased(),
+            session.sharedLinks.lowercased(),
+            session.contextNotes.lowercased(),
             session.captureMode.title.lowercased(),
             session.displayStatusTitle.lowercased(),
             participantText,

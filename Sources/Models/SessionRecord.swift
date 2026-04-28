@@ -21,6 +21,8 @@ struct SessionRecord: Identifiable, Codable, Hashable, Sendable {
     var transcriptEdits: [String: TranscriptEdit]
     var warningCount: Int
     var notes: String
+    var sharedLinks: String
+    var contextNotes: String
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -43,6 +45,8 @@ struct SessionRecord: Identifiable, Codable, Hashable, Sendable {
         case transcriptEdits
         case warningCount
         case notes
+        case sharedLinks
+        case contextNotes
     }
 
     var isRecording: Bool {
@@ -118,7 +122,9 @@ struct SessionRecord: Identifiable, Codable, Hashable, Sendable {
         speakerAssignments: [String: String],
         transcriptEdits: [String: TranscriptEdit],
         warningCount: Int,
-        notes: String
+        notes: String,
+        sharedLinks: String,
+        contextNotes: String
     ) {
         self.id = id
         self.title = title
@@ -140,6 +146,8 @@ struct SessionRecord: Identifiable, Codable, Hashable, Sendable {
         self.transcriptEdits = transcriptEdits
         self.warningCount = warningCount
         self.notes = notes
+        self.sharedLinks = sharedLinks
+        self.contextNotes = contextNotes
     }
 
     static func newDraft(captureMode: CaptureMode, audioSourceType: AudioSourceType) -> SessionRecord {
@@ -164,7 +172,9 @@ struct SessionRecord: Identifiable, Codable, Hashable, Sendable {
             speakerAssignments: [:],
             transcriptEdits: [:],
             warningCount: 0,
-            notes: ""
+            notes: "",
+            sharedLinks: "",
+            contextNotes: ""
         )
     }
 
@@ -190,6 +200,8 @@ struct SessionRecord: Identifiable, Codable, Hashable, Sendable {
         transcriptEdits = try container.decodeIfPresent([String: TranscriptEdit].self, forKey: .transcriptEdits) ?? [:]
         warningCount = try container.decode(Int.self, forKey: .warningCount)
         notes = try container.decode(String.self, forKey: .notes)
+        sharedLinks = try container.decodeIfPresent(String.self, forKey: .sharedLinks) ?? ""
+        contextNotes = try container.decodeIfPresent(String.self, forKey: .contextNotes) ?? ""
     }
 }
 

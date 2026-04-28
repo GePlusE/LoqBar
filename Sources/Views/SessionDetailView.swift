@@ -7,6 +7,8 @@ struct SessionDetailView: View {
     @State private var editedTitle = ""
     @State private var editingSegmentKey: String?
     @State private var segmentDraftText = ""
+    @State private var sharedLinksDraft = ""
+    @State private var contextNotesDraft = ""
 
     var body: some View {
         Group {
@@ -14,6 +16,7 @@ struct SessionDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         sessionCard(for: session)
+                        contextCard(for: session)
                         speakerAliasesCard(for: session)
 
                         let preview = transcriptPreview(for: session)
@@ -28,8 +31,57 @@ struct SessionDetailView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(Color(nsColor: .windowBackgroundColor))
+                .onAppear {
+                    syncDrafts(from: session)
+                }
+                .onChange(of: session.id) { _, _ in
+                    syncDrafts(from: session)
+                }
             } else {
                 ContentUnavailableView("Session Not Found", systemImage: "tray")
+            }
+        }
+    }
+
+    private func contextCard(for session: SessionRecord) -> some View {
+        detailCard("Agent Context") {
+            VStack(alignment: .leading, spacing: 16) {
+                detailField("Shared Links / References") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextEditor(text: $sharedLinksDraft)
+                            .frame(minHeight: 110)
+                            .padding(8)
+                            .background(Color.secondary.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                        Text("Add any URLs, docs, tickets, or references that were mentioned during the session.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                detailField("Additional Context / Notes") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextEditor(text: $contextNotesDraft)
+                            .frame(minHeight: 140)
+                            .padding(8)
+                            .background(Color.secondary.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                        Text("Add helpful context for a downstream agent, like project background, follow-up expectations, or anything not spoken clearly in the recording.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Button("Save Context") {
+                    appModel.updateSessionContext(
+                        for: session.id,
+                        sharedLinks: sharedLinksDraft,
+                        contextNotes: contextNotesDraft
+                    )
+                }
+                .disabled(sharedLinksDraft == session.sharedLinks && contextNotesDraft == session.contextNotes)
             }
         }
     }
@@ -336,6 +388,14 @@ struct SessionDetailView: View {
         case .failed:
             return .red
         }
+    }
+
+    private func syncDrafts(from session: SessionRecord) {
+        if editedTitle.isEmpty {
+            editedTitle = session.title
+        }
+        sharedLinksDraft = session.sharedLinks
+        contextNotesDraft = session.contextNotes
     }
 }
 
