@@ -4,64 +4,93 @@ struct FirstRunSetupView: View {
     @EnvironmentObject private var appModel: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Welcome to LoqBar")
-                .font(.largeTitle.weight(.semibold))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Welcome to LoqBar")
+                    .font(.largeTitle.weight(.semibold))
 
-            Text("This setup keeps things simple: choose whether LoqBar launches at login, then grant the permissions needed for local meeting capture.")
+                Text("This checklist shows what still needs attention before LoqBar is fully ready on this Mac. You can still finish setup now and come back later for optional steps like transcription.")
+                    .foregroundStyle(.secondary)
+
+                summaryCard
+
+                Toggle("Launch automatically when I log in", isOn: $appModel.firstRunState.launchAtLogin)
+
+                readinessChecklist
+
+                HStack(spacing: 12) {
+                    Button("Open Privacy Settings") {
+                        appModel.openPermissionsSettings()
+                    }
+
+                    Button("Refresh Status") {
+                        appModel.refreshPermissions()
+                    }
+
+                    Button("Install Managed Transcription") {
+                        appModel.installManagedTranscriptionFiles()
+                    }
+                    .disabled(appModel.isInstallingManagedTranscription)
+
+                    Spacer()
+
+                    Button("Complete Setup") {
+                        appModel.completeFirstRun()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(24)
+        }
+    }
+
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("First Use Readiness")
+                .font(.headline)
+            Text(appModel.firstUseReadinessSummary)
                 .foregroundStyle(.secondary)
 
-            Toggle("Launch automatically when I log in", isOn: $appModel.firstRunState.launchAtLogin)
-
-            permissionChecklist
-
-            HStack(spacing: 12) {
-                Button("Open Privacy Settings") {
-                    appModel.openPermissionsSettings()
-                }
-
-                Button("Refresh Status") {
-                    appModel.refreshPermissions()
-                }
-
-                Spacer()
-
-                Button("Complete Setup") {
-                    appModel.completeFirstRun()
-                }
-                .buttonStyle(.borderedProminent)
+            if appModel.isInstallingManagedTranscription || !appModel.managedTranscriptionInstallStatus.isEmpty {
+                Text(appModel.managedTranscriptionInstallStatus)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
         }
-        .padding(24)
+        .padding(16)
+        .background(.quaternary.opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    private var permissionChecklist: some View {
+    private var readinessChecklist: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Permissions")
+            Text("Checklist")
                 .font(.headline)
 
-            permissionRow(
-                title: "Microphone",
-                description: "Needed for in-person meetings and your own voice during calls.",
-                granted: appModel.permissionState.microphoneAuthorized
-            )
-
-            permissionRow(
-                title: "Screen Recording",
-                description: "Needed to investigate capturing Teams or system audio while you use headphones.",
-                granted: appModel.permissionState.screenCaptureAuthorized
-            )
+            ForEach(appModel.firstUseReadinessItems) { item in
+                readinessRow(item)
+            }
         }
     }
 
-    private func permissionRow(title: String, description: String, granted: Bool) -> some View {
+    private func readinessRow(_ item: FirstUseReadinessItem) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: granted ? "checkmark.seal.fill" : "exclamationmark.circle")
-                .foregroundStyle(granted ? .green : .orange)
+            Image(systemName: iconName(for: item.state))
+                .foregroundStyle(iconColor(for: item.state))
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.headline)
-                Text(description)
+                HStack(spacing: 8) {
+                    Text(item.title)
+                        .font(.headline)
+
+                    Text(item.state.title)
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(iconColor(for: item.state).opacity(0.16))
+                        .foregroundStyle(iconColor(for: item.state))
+                        .clipShape(Capsule())
+                }
+                Text(item.detail)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -70,5 +99,27 @@ struct FirstRunSetupView: View {
         .padding(12)
         .background(.quaternary.opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func iconName(for state: FirstUseReadinessItem.State) -> String {
+        switch state {
+        case .ready:
+            return "checkmark.seal.fill"
+        case .recommended:
+            return "info.circle"
+        case .required:
+            return "exclamationmark.circle"
+        }
+    }
+
+    private func iconColor(for state: FirstUseReadinessItem.State) -> Color {
+        switch state {
+        case .ready:
+            return .green
+        case .recommended:
+            return .blue
+        case .required:
+            return .orange
+        }
     }
 }

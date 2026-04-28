@@ -171,6 +171,11 @@ struct SettingsView: View {
                 """
             )
 
+            infoCard(
+                title: "First Use Readiness",
+                body: appModel.firstUseReadinessSummary
+            )
+
             Button(appModel.updateStatus == .checking ? "Checking…" : "Check for Updates") {
                 appModel.checkForUpdates()
             }

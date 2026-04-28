@@ -100,6 +100,54 @@ final class AppModel: ObservableObject {
         AppVersion.current().displayString
     }
 
+    var firstUseReadinessItems: [FirstUseReadinessItem] {
+        [
+            FirstUseReadinessItem(
+                title: "Microphone Permission",
+                detail: permissionState.microphoneAuthorized
+                    ? "LoqBar can record your local voice and in-person meetings."
+                    : "Required for any local recording. Enable microphone access in System Settings.",
+                state: permissionState.microphoneAuthorized ? .ready : .required
+            ),
+            FirstUseReadinessItem(
+                title: "Screen & System Audio Recording",
+                detail: permissionState.screenCaptureAuthorized
+                    ? "LoqBar can attempt Remote mode call capture."
+                    : "Recommended if you want Remote mode for calls. Local mode still works without it.",
+                state: permissionState.screenCaptureAuthorized ? .ready : .recommended
+            ),
+            FirstUseReadinessItem(
+                title: "Storage Root Folder",
+                detail: settings.storageRootFolder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? "Choose where LoqBar should keep recordings, transcripts, and managed files."
+                    : "LoqBar will store recordings and transcripts under \(settings.storageRootFolder).",
+                state: settings.storageRootFolder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .required : .ready
+            ),
+            FirstUseReadinessItem(
+                title: "Transcription Setup",
+                detail: transcriptionSetupStatus.isReady
+                    ? "LoqBar can transcribe recordings locally on this Mac."
+                    : "Recommended if you want transcripts. Open Transcription settings and install a managed copy or choose external whisper files.",
+                state: transcriptionSetupStatus.isReady ? .ready : .recommended
+            )
+        ]
+    }
+
+    var firstUseReadinessSummary: String {
+        let requiredCount = firstUseReadinessItems.filter { $0.state == .required }.count
+        let recommendedCount = firstUseReadinessItems.filter { $0.state == .recommended }.count
+
+        if requiredCount == 0 && recommendedCount == 0 {
+            return "LoqBar is ready for recording and transcription on this Mac."
+        }
+
+        if requiredCount == 0 {
+            return "LoqBar is ready for recording. \(recommendedCount) optional setup step\(recommendedCount == 1 ? "" : "s") can still improve the full workflow."
+        }
+
+        return "\(requiredCount) required setup step\(requiredCount == 1 ? "" : "s") still needs attention before LoqBar is fully ready."
+    }
+
     var updateFeedConfiguration: AppReleaseFeedConfiguration {
         AppReleaseFeedConfiguration.fromMainBundle()
     }
@@ -1127,4 +1175,28 @@ private extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
     }
+}
+
+struct FirstUseReadinessItem: Identifiable {
+    enum State {
+        case ready
+        case recommended
+        case required
+
+        var title: String {
+            switch self {
+            case .ready:
+                return "Ready"
+            case .recommended:
+                return "Recommended"
+            case .required:
+                return "Required"
+            }
+        }
+    }
+
+    let id = UUID()
+    let title: String
+    let detail: String
+    let state: State
 }
