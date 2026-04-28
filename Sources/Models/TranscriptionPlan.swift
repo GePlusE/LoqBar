@@ -1,6 +1,6 @@
 import Foundation
 
-struct TranscriptionPlan {
+struct TranscriptionPlan: Sendable {
     let sessionID: UUID
     let title: String
     let captureMode: CaptureMode
@@ -11,7 +11,7 @@ struct TranscriptionPlan {
     let notes: [String]
 }
 
-enum PreferredTranscriptSource: String {
+enum PreferredTranscriptSource: String, Sendable {
     case microphone
     case systemAudio
 }

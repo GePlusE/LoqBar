@@ -1,6 +1,6 @@
 import Foundation
 
-struct TranscriptExport {
+struct TranscriptExport: Sendable {
     let path: String
     let warningCount: Int
     let speakersDetected: Int

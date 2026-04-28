@@ -8,12 +8,19 @@ struct OptimizedAudioFiles {
 
 struct AudioStorageOptimizer {
     func optimize(_ capture: ActiveCaptureSession) throws -> OptimizedAudioFiles {
+        try optimize(
+            microphoneFileURL: capture.microphoneFileURL,
+            systemAudioFileURL: capture.systemAudioFileURL
+        )
+    }
+
+    func optimize(microphoneFileURL: URL?, systemAudioFileURL: URL?) throws -> OptimizedAudioFiles {
         let optimizedMicrophone = try optimizeIfPresent(
-            inputURL: capture.microphoneFileURL,
+            inputURL: microphoneFileURL,
             outputFileName: "microphone.flac"
         )
         let optimizedSystemAudio = try optimizeIfPresent(
-            inputURL: capture.systemAudioFileURL,
+            inputURL: systemAudioFileURL,
             outputFileName: "system-audio.flac"
         )
 

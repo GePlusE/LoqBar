@@ -1,6 +1,6 @@
 import Foundation
 
-struct TranscriptContent {
+struct TranscriptContent: Sendable {
     let title: String
     let language: String
     let segments: [TranscriptSegment]
@@ -10,7 +10,7 @@ struct TranscriptContent {
     let analysis: TranscriptionAnalysis
 }
 
-struct TranscriptSegment {
+struct TranscriptSegment: Sendable {
     let absoluteTimestamp: Date
     let relativeOffset: TimeInterval
     let speakerLabel: String
@@ -19,7 +19,7 @@ struct TranscriptSegment {
     let lowConfidence: Bool
 }
 
-struct TranscriptionAnalysis {
+struct TranscriptionAnalysis: Sendable {
     let primarySources: [String]
     let notes: [String]
     let engineDescription: String

@@ -287,14 +287,13 @@ final class AppModel: ObservableObject {
         Task {
             do {
                 let activeCapture = try await recordingCoordinator.stop()
-                let optimizedAudio = try? audioStorageOptimizer.optimize(activeCapture)
-                apply(
-                    activeCapture,
-                    optimizedAudio: optimizedAudio,
-                    to: session.id,
-                    fallbackNote: interruptionNote ?? "Capture finished."
-                )
-                finalizeSession(session.id, notePrefix: interruptionNote)
+                guard let snapshot = prepareStoppedSessionForBackgroundProcessing(
+                    sessionID: session.id,
+                    capture: activeCapture,
+                    notePrefix: interruptionNote
+                ) else { return }
+
+                startBackgroundProcessing(for: snapshot)
             } catch {
                 markSessionFailed(session.id, error: .recordingStopFailed(error.localizedDescription))
             }
@@ -375,20 +374,17 @@ final class AppModel: ObservableObject {
 
         sessions[index].status = .processing
         sessions[index].notes = "Retrying transcription..."
+        processingMessage = "Processing in background"
         persist()
 
-        Task {
-            do {
-                try transcribeAndExportSession(sessionID)
-            } catch let error as AppError {
-                markSessionCompletedWithTranscriptionIssue(sessionID, error: error)
-            } catch {
-                markSessionCompletedWithTranscriptionIssue(
-                    sessionID,
-                    error: .transcriptionExecutionFailed("Recording finished and audio was saved, but transcription could not complete: \(error.localizedDescription)")
-                )
-            }
-        }
+        startBackgroundProcessing(
+            for: BackgroundProcessingRequest(
+                session: sessions[index],
+                captureSummary: sessions[index].notes,
+                notePrefix: nil,
+                shouldOptimizeAudio: false
+            )
+        )
     }
 
     func updateAlias(for session: SessionRecord, speakerLabel: String, alias: String) {
@@ -724,60 +720,74 @@ final class AppModel: ObservableObject {
         persist()
     }
 
-    private func finalizeSession(_ sessionID: UUID) {
-        finalizeSession(sessionID, notePrefix: nil)
-    }
-
-    private func finalizeSession(_ sessionID: UUID, notePrefix: String?) {
-        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+    private func prepareStoppedSessionForBackgroundProcessing(
+        sessionID: UUID,
+        capture: ActiveCaptureSession,
+        notePrefix: String?
+    ) -> BackgroundProcessingRequest? {
+        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return nil }
 
         sessions[sessionIndex].endedAt = Date()
         sessions[sessionIndex].durationSeconds = max(
             Int(sessions[sessionIndex].endedAt?.timeIntervalSince(sessions[sessionIndex].startedAt) ?? 0),
             1
         )
-        processingMessage = "Generating transcript export"
+        sessions[sessionIndex].audioPath = capture.microphoneFileURL?.path
+        sessions[sessionIndex].systemAudioPath = capture.systemAudioFileURL?.path
+        sessions[sessionIndex].notes = capture.summary
+        processingMessage = "Processing in background"
+        persist()
 
-        do {
-            try transcribeAndExportSession(sessionID)
-            if let notePrefix, let refreshedIndex = sessions.firstIndex(where: { $0.id == sessionID }) {
-                sessions[refreshedIndex].notes = "\(notePrefix) \(sessions[refreshedIndex].notes)"
-                persist()
-            }
-            runRetentionCleanupIfNeeded()
-        } catch let error as AppError {
-            markSessionCompletedWithTranscriptionIssue(sessionID, error: error)
-        } catch {
-            markSessionCompletedWithTranscriptionIssue(
-                sessionID,
-                error: .transcriptionExecutionFailed("Recording finished and audio was saved, but transcription could not complete: \(error.localizedDescription)")
+        return BackgroundProcessingRequest(
+            session: sessions[sessionIndex],
+            captureSummary: capture.summary,
+            notePrefix: notePrefix,
+            shouldOptimizeAudio: true
+        )
+    }
+
+    private func startBackgroundProcessing(for request: BackgroundProcessingRequest) {
+        let settingsSnapshot = settings
+
+        Task.detached(priority: .userInitiated) {
+            let outcome = SessionBackgroundProcessor.process(
+                request: request,
+                settings: settingsSnapshot
             )
+
+            await MainActor.run {
+                self.applyBackgroundProcessingOutcome(outcome, for: request.session.id)
+            }
         }
     }
 
-    private func transcribeAndExportSession(_ sessionID: UUID) throws {
-        guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+    private func applyBackgroundProcessingOutcome(_ outcome: BackgroundProcessingOutcome, for sessionID: UUID) {
+        switch outcome {
+        case let .success(result):
+            guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
 
-        do {
-            let plan = transcriptionService.makePlan(for: sessions[sessionIndex])
-            let content = try transcriptionService.transcribe(
-                plan: plan,
-                session: sessions[sessionIndex],
-                settings: settings
-            )
-            sessions[sessionIndex].language = content.language
-            let transcript = try transcriptExporter.exportTranscript(
-                for: sessions[sessionIndex],
-                settings: settings,
-                content: content
-            )
+            sessions[sessionIndex].audioPath = result.audioPath
+            sessions[sessionIndex].systemAudioPath = result.systemAudioPath
             sessions[sessionIndex].status = .completed
-            sessions[sessionIndex].transcriptPath = transcript.path
-            sessions[sessionIndex].warningCount = transcript.warningCount
-            sessions[sessionIndex].speakerCount = transcript.speakersDetected
-            sessions[sessionIndex].notes = ([transcript.summary] + transcript.planNotes).joined(separator: " ")
-            processingMessage = "Transcript exported"
+            sessions[sessionIndex].transcriptPath = result.transcriptPath
+            sessions[sessionIndex].warningCount = result.warningCount
+            sessions[sessionIndex].speakerCount = result.speakerCount
+            sessions[sessionIndex].notes = result.notes
+            sessions[sessionIndex].language = result.language
             persist()
+            processingMessage = hasProcessingSessions ? "Processing in background" : "Transcript exported"
+            runRetentionCleanupIfNeeded()
+
+        case let .transcriptionPending(result):
+            guard let sessionIndex = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+
+            sessions[sessionIndex].audioPath = result.audioPath
+            sessions[sessionIndex].systemAudioPath = result.systemAudioPath
+            sessions[sessionIndex].status = .completed
+            sessions[sessionIndex].notes = result.note
+            persist()
+            processingMessage = hasProcessingSessions ? "Processing in background" : "Recording saved, transcription pending"
+            present(error: result.error)
         }
     }
 
@@ -904,8 +914,117 @@ final class AppModel: ObservableObject {
             sessions[index].notes = "Recording saved. Transcription pending: \(error.recoverySuggestion)"
             persist()
         }
-        processingMessage = "Recording saved, transcription pending"
+        processingMessage = hasProcessingSessions ? "Processing in background" : "Recording saved, transcription pending"
         present(error: error)
+    }
+}
+
+private struct BackgroundProcessingRequest: Sendable {
+    let session: SessionRecord
+    let captureSummary: String
+    let notePrefix: String?
+    let shouldOptimizeAudio: Bool
+}
+
+private struct BackgroundProcessingSuccess: Sendable {
+    let audioPath: String?
+    let systemAudioPath: String?
+    let transcriptPath: String
+    let warningCount: Int
+    let speakerCount: Int
+    let notes: String
+    let language: String
+}
+
+private struct BackgroundProcessingFailure: Sendable {
+    let audioPath: String?
+    let systemAudioPath: String?
+    let note: String
+    let error: AppError
+}
+
+private enum BackgroundProcessingOutcome: Sendable {
+    case success(BackgroundProcessingSuccess)
+    case transcriptionPending(BackgroundProcessingFailure)
+}
+
+private enum SessionBackgroundProcessor {
+    static func process(
+        request: BackgroundProcessingRequest,
+        settings: AppSettings
+    ) -> BackgroundProcessingOutcome {
+        var workingSession = request.session
+
+        let optimizer = AudioStorageOptimizer()
+        let transcriptionService = TranscriptionService()
+        let transcriptExporter = TranscriptExporter()
+
+        let optimizedAudio: OptimizedAudioFiles?
+        if request.shouldOptimizeAudio {
+            optimizedAudio = try? optimizer.optimize(
+                microphoneFileURL: workingSession.audioPath.map(URL.init(fileURLWithPath:)),
+                systemAudioFileURL: workingSession.systemAudioPath.map(URL.init(fileURLWithPath:))
+            )
+        } else {
+            optimizedAudio = nil
+        }
+
+        workingSession.audioPath = optimizedAudio?.microphoneFileURL?.path ?? workingSession.audioPath
+        workingSession.systemAudioPath = optimizedAudio?.systemAudioFileURL?.path ?? workingSession.systemAudioPath
+
+        do {
+            let plan = transcriptionService.makePlan(for: workingSession)
+            let content = try transcriptionService.transcribe(
+                plan: plan,
+                session: workingSession,
+                settings: settings
+            )
+            let transcript = try transcriptExporter.exportTranscript(
+                for: workingSession,
+                settings: settings,
+                content: content
+            )
+
+            let finalNotes = ([transcript.summary] + transcript.planNotes).joined(separator: " ")
+            let note = [request.notePrefix, finalNotes]
+                .compactMap { $0?.nilIfEmpty }
+                .joined(separator: " ")
+
+            return .success(
+                BackgroundProcessingSuccess(
+                    audioPath: workingSession.audioPath,
+                    systemAudioPath: workingSession.systemAudioPath,
+                    transcriptPath: transcript.path,
+                    warningCount: transcript.warningCount,
+                    speakerCount: transcript.speakersDetected,
+                    notes: note.isEmpty ? finalNotes : note,
+                    language: content.language
+                )
+            )
+        } catch let error as AppError {
+            let note = "Recording saved. Transcription pending: \(error.recoverySuggestion)"
+            return .transcriptionPending(
+                BackgroundProcessingFailure(
+                    audioPath: workingSession.audioPath,
+                    systemAudioPath: workingSession.systemAudioPath,
+                    note: note,
+                    error: error
+                )
+            )
+        } catch {
+            let appError = AppError.transcriptionExecutionFailed(
+                "Recording finished and audio was saved, but transcription could not complete: \(error.localizedDescription)"
+            )
+            let note = "Recording saved. Transcription pending: \(appError.recoverySuggestion)"
+            return .transcriptionPending(
+                BackgroundProcessingFailure(
+                    audioPath: workingSession.audioPath,
+                    systemAudioPath: workingSession.systemAudioPath,
+                    note: note,
+                    error: appError
+                )
+            )
+        }
     }
 }
 

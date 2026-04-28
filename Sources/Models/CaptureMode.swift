@@ -1,6 +1,6 @@
 import Foundation
 
-enum CaptureMode: String, Codable, CaseIterable, Identifiable {
+enum CaptureMode: String, Codable, CaseIterable, Identifiable, Sendable {
     case auto
     case localMeeting
     case call
@@ -19,7 +19,7 @@ enum CaptureMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum AudioSourceType: String, Codable {
+enum AudioSourceType: String, Codable, Sendable {
     case microphoneOnly
     case systemAudioOnly
     case appAudioPlusMicrophone
@@ -42,7 +42,7 @@ enum AudioSourceType: String, Codable {
     }
 }
 
-enum DiagnosticCaptureKind: String, Codable, Identifiable {
+enum DiagnosticCaptureKind: String, Codable, Identifiable, Sendable {
     case microphoneOnly
     case systemAudioOnly
 

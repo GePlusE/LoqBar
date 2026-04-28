@@ -1,6 +1,6 @@
 import Foundation
 
-enum TranscriptionLanguageOption: String, Codable, CaseIterable, Identifiable {
+enum TranscriptionLanguageOption: String, Codable, CaseIterable, Identifiable, Sendable {
     case auto
     case english = "en"
     case german = "de"
@@ -37,7 +37,7 @@ enum TranscriptionLanguageOption: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-enum TranscriptionModelSuggestion: String, CaseIterable, Identifiable {
+enum TranscriptionModelSuggestion: String, CaseIterable, Identifiable, Sendable {
     case base
     case small
     case medium
@@ -108,7 +108,7 @@ enum TranscriptionModelSuggestion: String, CaseIterable, Identifiable {
     }
 }
 
-struct AppSettings: Codable {
+struct AppSettings: Codable, Sendable {
     var storageRootFolder: String
     var audioRetentionPolicy: AudioRetentionPolicy
     var defaultCaptureMode: CaptureMode
@@ -205,7 +205,7 @@ struct AppSettings: Codable {
     }
 }
 
-enum AudioRetentionPolicy: String, Codable, CaseIterable, Identifiable {
+enum AudioRetentionPolicy: String, Codable, CaseIterable, Identifiable, Sendable {
     case deleteImmediately
     case days7
     case days14

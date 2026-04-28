@@ -1,6 +1,6 @@
 import Foundation
 
-struct SessionRecord: Identifiable, Codable, Hashable {
+struct SessionRecord: Identifiable, Codable, Hashable, Sendable {
     var id: UUID
     var title: String
     var createdAt: Date
@@ -193,13 +193,13 @@ struct SessionRecord: Identifiable, Codable, Hashable {
     }
 }
 
-struct TranscriptEdit: Codable, Hashable {
+struct TranscriptEdit: Codable, Hashable, Sendable {
     var originalText: String
     var editedText: String
     var editedAt: Date
 }
 
-enum SessionStatus: String, Codable, CaseIterable {
+enum SessionStatus: String, Codable, CaseIterable, Sendable {
     case idle
     case recording
     case processing

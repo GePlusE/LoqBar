@@ -1,6 +1,6 @@
 import Foundation
 
-enum AppError: Error {
+enum AppError: Error, Sendable {
     case microphonePermissionMissing
     case screenRecordingPermissionMissing
     case callAudioCaptureUnavailable
