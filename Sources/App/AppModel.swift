@@ -734,6 +734,17 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func openManagedTranscriptionFolder() {
+        let url = URL(fileURLWithPath: settings.managedTranscriptionRootFolder, isDirectory: true)
+
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(url)
+        } catch {
+            present(error: .storageSetupFailed("LoqBar could not open the managed transcription folder: \(error.localizedDescription)"))
+        }
+    }
+
     func clearExternalTranscriptionPaths() {
         settings.transcriptionExecutablePath = ""
         settings.transcriptionModelPath = ""

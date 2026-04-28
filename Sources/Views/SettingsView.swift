@@ -294,13 +294,22 @@ struct SettingsView: View {
             }
 
             infoCard(
+                title: "How LoqBar Chooses Transcription Files",
+                body: """
+                If you configure both external paths below, LoqBar will prefer those files and leave that setup untouched.
+
+                If no external paths are configured, LoqBar uses the managed setup inside the hidden .loqbar folder for this Mac.
+                """
+            )
+
+            infoCard(
                 title: "Managed Transcription Folder",
                 body: """
-                If no external paths are configured, LoqBar will use the hidden managed folder inside your storage root.
-
-                The managed setup installs a bundled `whisper-cli` and downloads the selected model automatically for this Mac.
+                LoqBar keeps the managed transcription runtime here:
 
                 \(appModel.settings.managedTranscriptionRootFolder)
+
+                Managed setup installs `whisper-cli`, its runtime libraries, and the selected model automatically for this Mac.
                 """
             )
 
@@ -310,26 +319,39 @@ struct SettingsView: View {
             )
 
             HStack(spacing: 12) {
-                Button(appModel.isInstallingManagedTranscription ? "Installing…" : "Install Managed Copy") {
+                Button(appModel.isInstallingManagedTranscription ? "Installing…" : managedInstallActionTitle) {
                     appModel.installManagedTranscriptionFiles()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(appModel.isInstallingManagedTranscription)
 
-                Button("Clear External Paths") {
-                    appModel.clearExternalTranscriptionPaths()
+                if appModel.settings.hasExternalTranscriptionPaths {
+                    Button("Use Managed Setup") {
+                        appModel.clearExternalTranscriptionPaths()
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Button("Open Managed Folder") {
+                    appModel.openManagedTranscriptionFolder()
                 }
                 .buttonStyle(.bordered)
-                .disabled(
-                    appModel.settings.transcriptionExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-                    appModel.settings.transcriptionModelPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                )
             }
 
-            if appModel.isInstallingManagedTranscription {
-                ProgressView()
-                    .controlSize(.small)
+            if appModel.settings.hasExternalTranscriptionPaths {
+                infoText("External transcription paths are configured, so LoqBar will prefer those files. Choose `Use Managed Setup` when you want this Mac to switch back to the managed runtime.")
+            } else {
+                infoText("No external transcription paths are configured right now, so LoqBar will rely on the managed setup when transcription is ready.")
             }
+
+            Button("Clear External Paths") {
+                appModel.clearExternalTranscriptionPaths()
+            }
+            .buttonStyle(.bordered)
+            .disabled(
+                appModel.settings.transcriptionExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                appModel.settings.transcriptionModelPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            )
 
             settingsField("Optional external whisper-cli path") {
                 pathField(
@@ -350,12 +372,6 @@ struct SettingsView: View {
                     appModel.chooseExternalModelFile()
                 }
             }
-
-            infoText(
-                appModel.settings.hasExternalTranscriptionPaths
-                ? "External transcription paths are configured, so LoqBar will prefer those files and leave your existing setup untouched."
-                : "No external transcription paths are configured right now."
-            )
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Custom vocabulary")
@@ -396,11 +412,25 @@ struct SettingsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
+            Text("Active source: \(status.activeSourceLabel)")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.secondary)
+
             ForEach(status.detailLines, id: \.self) { line in
                 Text(line)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
+            }
+
+            if appModel.isInstallingManagedTranscription {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("LoqBar is updating the managed transcription setup for this Mac.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(18)
@@ -453,6 +483,8 @@ struct SettingsView: View {
         switch status.state {
         case .readyExternal, .readyManaged:
             return "Ready"
+        case .managedModelNeedsInstall, .managedRuntimeNeedsInstall:
+            return "Action Needed"
         case .brokenExternal:
             return "Broken"
         case .notConfigured, .incompleteExternal:
@@ -497,6 +529,21 @@ struct SettingsView: View {
         Current model: `\(appModel.settings.transcriptionModelIdentifier)`
         LoqBar will use this identifier as configured. For call recordings, `small` or `medium` usually produce better results than `base`.
         """
+    }
+
+    private var managedInstallActionTitle: String {
+        switch appModel.transcriptionSetupStatus.state {
+        case .readyManaged:
+            return "Reinstall Managed Setup"
+        case .managedModelNeedsInstall:
+            return "Install Selected Model"
+        case .managedRuntimeNeedsInstall:
+            return "Repair Managed Setup"
+        case .readyExternal:
+            return "Refresh Managed Setup"
+        case .notConfigured, .incompleteExternal, .brokenExternal:
+            return "Install Managed Setup"
+        }
     }
 
     private func pathField(
