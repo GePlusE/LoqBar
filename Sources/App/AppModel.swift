@@ -423,6 +423,20 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func addSpeakerSlot(to sessionID: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == sessionID }) else { return }
+        sessions[index].speakerCount = max(sessions[index].speakerCount + 1, 1)
+
+        do {
+            try transcriptRevisionService.refreshTranscriptPresentation(for: sessions[index])
+            persist()
+        } catch let error as AppError {
+            present(error: error)
+        } catch {
+            present(error: .transcriptExportFailed("LoqBar could not refresh the transcript after adding another speaker slot: \(error.localizedDescription)"))
+        }
+    }
+
     func updateSpeakerAssignment(
         for sessionID: UUID,
         segmentKey: String,
@@ -815,7 +829,7 @@ final class AppModel: ObservableObject {
             sessions[sessionIndex].status = .completed
             sessions[sessionIndex].transcriptPath = result.transcriptPath
             sessions[sessionIndex].warningCount = result.warningCount
-            sessions[sessionIndex].speakerCount = result.speakerCount
+            sessions[sessionIndex].speakerCount = max(sessions[sessionIndex].speakerCount, result.speakerCount)
             sessions[sessionIndex].notes = result.notes
             sessions[sessionIndex].language = result.language
             persist()

@@ -146,6 +146,10 @@ struct SessionDetailView: View {
     private func speakerAliasesCard(for session: SessionRecord) -> some View {
         detailCard("Speaker Aliases") {
             VStack(alignment: .leading, spacing: 14) {
+                Text("LoqBar currently separates local and remote audio, but it does not yet truly identify every remote voice automatically. Add more speaker slots here when a session has more participants, then reassign transcript segments as needed.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
                 if session.speakerLabels.isEmpty {
                     Text("Speaker aliases will appear after LoqBar detects speakers in the transcript.")
                         .foregroundStyle(.secondary)
@@ -160,6 +164,11 @@ struct SessionDetailView: View {
                         .textFieldStyle(.roundedBorder)
                     }
                 }
+
+                Button("Add Speaker") {
+                    appModel.addSpeakerSlot(to: session.id)
+                }
+                .buttonStyle(.bordered)
             }
         }
     }
