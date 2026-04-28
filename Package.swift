@@ -17,5 +17,10 @@ let package = Package(
             name: "LoqBar",
             path: "Sources"
         ),
+        .testTarget(
+            name: "LoqBarTests",
+            dependencies: ["LoqBar"],
+            path: "Tests/LoqBarTests"
+        ),
     ]
 )
