@@ -18,9 +18,9 @@ final class AppModel: ObservableObject {
     private var recentlyUpdatedToVersion: String?
     private var hasShownPostUpdatePermissionHint = false
 
-    private let permissionsService: PermissionsService
+    let permissionsService: PermissionsService
     private let loginItemService: LoginItemService
-    private let sessionStore: SessionStore
+    let sessionStore: SessionStore
     private let transcriptExporter: TranscriptExporter
     private let transcriptionService: TranscriptionService
     private let captureService: CaptureService
@@ -28,8 +28,8 @@ final class AppModel: ObservableObject {
     private let audioStorageOptimizer: AudioStorageOptimizer
     private let transcriptRevisionService: TranscriptRevisionService
     private let retentionCleanupService: RetentionCleanupService
-    private let updateCheckService: UpdateCheckService
-    private let managedTranscriptionInstallService: ManagedTranscriptionInstallService
+    let updateCheckService: UpdateCheckService
+    let managedTranscriptionInstallService: ManagedTranscriptionInstallService
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -587,240 +587,12 @@ final class AppModel: ObservableObject {
         alertContext = nil
     }
 
-    func openPermissionsSettings() {
-        permissionsService.openRelevantSettings()
-    }
-
-    func openTranscriptFolder() {
-        sessionStore.openTranscriptFolder(settings: settings)
-    }
-
-    func openRecordingRootFolder() {
-        sessionStore.openRecordingRootFolder(settings: settings)
-    }
-
-    func openLatestRecordingFolder() {
-        guard let session = latestSession else { return }
-        sessionStore.openRecordingFolder(for: session)
-    }
-
-    func revealLatestMicrophoneRecording() {
-        guard let path = latestSession?.audioPath else { return }
-        sessionStore.revealFile(at: path)
-    }
-
-    func revealLatestSystemAudioRecording() {
-        guard let path = latestSession?.systemAudioPath else { return }
-        sessionStore.revealFile(at: path)
-    }
-
-    func quitApp() {
-        NSApp.terminate(nil)
-    }
-
-    func prepareToPresentAuxiliaryWindow() {
-        _ = NSApp.setActivationPolicy(.regular)
-        NSRunningApplication.current.activate(options: [.activateAllWindows])
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    func bringAuxiliaryWindowToFront(titleContains titleFragment: String, remainingAttempts: Int = 8) {
-        prepareToPresentAuxiliaryWindow()
-
-        let matchingWindow = NSApp.windows.first { window in
-            window.title.localizedCaseInsensitiveContains(titleFragment)
-        }
-
-        if let matchingWindow {
-            matchingWindow.collectionBehavior.insert(.moveToActiveSpace)
-            matchingWindow.level = .normal
-            matchingWindow.orderFrontRegardless()
-            matchingWindow.makeKeyAndOrderFront(nil)
-            matchingWindow.orderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-
-        guard remainingAttempts > 0 else { return }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-            self?.bringAuxiliaryWindowToFront(
-                titleContains: titleFragment,
-                remainingAttempts: remainingAttempts - 1
-            )
-        }
-    }
-
-    func restoreMenuBarPresentationIfPossible() {
-        let auxiliaryWindowsAreVisible = NSApp.windows.contains { window in
-            (window.title.localizedCaseInsensitiveContains("Settings") ||
-             window.title.localizedCaseInsensitiveContains("Recent Sessions")) &&
-            window.isVisible
-        }
-
-        guard !auxiliaryWindowsAreVisible else { return }
-
-        _ = NSApp.setActivationPolicy(.accessory)
-    }
-
-    func chooseStorageRootFolder() {
-        prepareToPresentAuxiliaryWindow()
-
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Choose Folder"
-        panel.message = "Choose the root folder where LoqBar should store recordings, transcripts, and managed files."
-        panel.directoryURL = URL(fileURLWithPath: settings.storageRootFolder, isDirectory: true)
-
-        if panel.runModal() == .OK, let url = panel.url {
-            settings.storageRootFolder = url.path
-        }
-    }
-
-    func createStorageRootFolder() {
-        prepareToPresentAuxiliaryWindow()
-
-        let currentRoot = URL(fileURLWithPath: settings.storageRootFolder, isDirectory: true)
-        let panel = NSSavePanel()
-        panel.canCreateDirectories = true
-        panel.prompt = "Create Folder"
-        panel.title = "Create Storage Root Folder"
-        panel.message = "Create a new root folder for LoqBar recordings, transcripts, and managed files."
-        panel.nameFieldLabel = "Folder name:"
-        panel.nameFieldStringValue = currentRoot.lastPathComponent.isEmpty ? "LoqBar" : currentRoot.lastPathComponent
-        panel.directoryURL = currentRoot.deletingLastPathComponent()
-        panel.isExtensionHidden = true
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-            settings.storageRootFolder = url.path
-        } catch {
-            present(error: .storageSetupFailed("LoqBar could not create the selected storage folder: \(error.localizedDescription)"))
-        }
-    }
-
-    func chooseExternalWhisperExecutable() {
-        prepareToPresentAuxiliaryWindow()
-
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Choose Executable"
-        panel.directoryURL = URL(fileURLWithPath: settings.transcriptionExecutablePath.nilIfEmpty ?? StoragePaths.appSupportFolder.path)
-
-        if panel.runModal() == .OK, let url = panel.url {
-            settings.transcriptionExecutablePath = url.path
-        }
-    }
-
-    func chooseExternalModelFile() {
-        prepareToPresentAuxiliaryWindow()
-
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Choose Model File"
-        panel.directoryURL = URL(fileURLWithPath: settings.transcriptionModelPath.nilIfEmpty ?? settings.storageRootFolder)
-
-        if panel.runModal() == .OK, let url = panel.url {
-            settings.transcriptionModelPath = url.path
-        }
-    }
-
-    func openManagedTranscriptionFolder() {
-        let url = URL(fileURLWithPath: settings.managedTranscriptionRootFolder, isDirectory: true)
-
-        do {
-            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-            NSWorkspace.shared.open(url)
-        } catch {
-            present(error: .storageSetupFailed("LoqBar could not open the managed transcription folder: \(error.localizedDescription)"))
-        }
-    }
-
-    func clearExternalTranscriptionPaths() {
-        settings.transcriptionExecutablePath = ""
-        settings.transcriptionModelPath = ""
-        persist()
-    }
-
-    func runCleanupNow() {
-        runRetentionCleanup(markRunTimestamp: true)
-    }
-
-    func checkForUpdates() {
-        guard updateStatus != .checking else { return }
-
-        updateStatus = .checking
-        let currentVersion = AppVersion.current()
-        let configuration = AppReleaseFeedConfiguration.fromMainBundle()
-
-        Task {
-            let result = await updateCheckService.checkForUpdates(
-                currentVersion: currentVersion,
-                configuration: configuration
-            )
-
-            await MainActor.run {
-                handleUpdateCheckResult(result)
-            }
-        }
-    }
-
-    func installManagedTranscriptionFiles() {
-        guard !isInstallingManagedTranscription else { return }
-
-        isInstallingManagedTranscription = true
-        managedTranscriptionInstallStatus = "Preparing managed transcription setup…"
-
-        Task {
-            do {
-                let result = try await managedTranscriptionInstallService.install(
-                    settings: settings
-                ) { [weak self] progress in
-                    await MainActor.run {
-                        self?.managedTranscriptionInstallStatus = progress
-                    }
-                }
-
-                await MainActor.run {
-                    self.managedTranscriptionInstallStatus = """
-                    Managed transcription is ready.
-                    \(result.executableSourceDescription)
-                    \(result.modelSourceDescription)
-                    """
-                    self.isInstallingManagedTranscription = false
-                    self.persist()
-                }
-            } catch let error as AppError {
-                await MainActor.run {
-                    self.isInstallingManagedTranscription = false
-                    self.managedTranscriptionInstallStatus = "Managed transcription setup failed."
-                    self.present(error: error)
-                }
-            } catch {
-                await MainActor.run {
-                    self.isInstallingManagedTranscription = false
-                    self.managedTranscriptionInstallStatus = "Managed transcription setup failed."
-                    self.present(error: .storageSetupFailed("LoqBar could not install the managed transcription files: \(error.localizedDescription)"))
-                }
-            }
-        }
-    }
-
     func persist() {
         sessionStore.save(settings: settings)
         sessionStore.save(sessions: sessions)
     }
 
-    private func present(error: AppError) {
+    func present(error: AppError) {
         alertContext = AlertContext(
             title: error.title,
             message: error.recoverySuggestion
@@ -924,7 +696,7 @@ final class AppModel: ObservableObject {
         runRetentionCleanup(markRunTimestamp: false)
     }
 
-    private func runRetentionCleanup(markRunTimestamp: Bool) {
+    func runRetentionCleanup(markRunTimestamp: Bool) {
         let result = retentionCleanupService.run(sessions: sessions, settings: settings)
         sessions = result.sessions
 
@@ -936,7 +708,7 @@ final class AppModel: ObservableObject {
         persist()
     }
 
-    private func handleUpdateCheckResult(_ result: UpdateCheckResult) {
+    func handleUpdateCheckResult(_ result: UpdateCheckResult) {
         let now = Date()
 
         switch result {
