@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import Foundation
 #if canImport(ScreenCaptureKit)
 import CoreMedia
@@ -287,20 +288,12 @@ final class ScreenCaptureRecorder {
     static func start(outputURL: URL) async throws -> ScreenCaptureRecorder {
         #if canImport(ScreenCaptureKit)
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let display = content.displays.first else {
+        guard !content.displays.isEmpty else {
             throw AppError.callAudioCaptureUnavailable
         }
 
-        let teamsBundleIdentifiers = ["com.microsoft.teams2", "com.microsoft.teams"]
-        let teamsApp = content.applications.first { application in
-            teamsBundleIdentifiers.contains(application.bundleIdentifier)
-        }
-
-        let filter = SCContentFilter(
-            display: display,
-            excludingApplications: [],
-            exceptingWindows: []
-        )
+        let selection = ScreenCaptureSourceSelection.select(from: content)
+        let filter = selection.contentFilter
 
         let configuration = SCStreamConfiguration()
         configuration.capturesAudio = true
@@ -316,9 +309,7 @@ final class ScreenCaptureRecorder {
         try stream.addStreamOutput(streamOutput, type: .audio, sampleHandlerQueue: streamOutput.queue)
         try await stream.startCapture()
 
-        let summary = teamsApp == nil
-            ? "Call capture active. System audio is streaming, but a Teams process was not detected."
-            : "Call capture active. Teams was detected and ScreenCaptureKit system audio is streaming."
+        let summary = selection.summary
 
         return ScreenCaptureRecorder(summary: summary, stream: stream, streamOutput: streamOutput)
         #else
@@ -335,6 +326,173 @@ final class ScreenCaptureRecorder {
         #endif
     }
 }
+
+#if canImport(ScreenCaptureKit)
+private struct ScreenCaptureSourceSelection {
+    let contentFilter: SCContentFilter
+    let summary: String
+
+    static func select(from content: SCShareableContent) -> ScreenCaptureSourceSelection {
+        let preferredDisplay = preferredDisplay(from: content)
+
+        if let matchedWindow = bestCallWindow(in: content),
+           let app = matchedWindow.owningApplication {
+            let display = display(containing: matchedWindow.frame, from: content) ?? preferredDisplay
+            let filter = SCContentFilter(
+                display: display,
+                including: [app],
+                exceptingWindows: []
+            )
+            let summary = "Call capture active. Detected \(app.applicationName) on \(displayDescription(display)) and scoped ScreenCaptureKit to that app."
+            return ScreenCaptureSourceSelection(contentFilter: filter, summary: summary)
+        }
+
+        if let app = bestCallApplication(in: content) {
+            let filter = SCContentFilter(
+                display: preferredDisplay,
+                including: [app],
+                exceptingWindows: []
+            )
+            let summary = "Call capture active. Detected \(app.applicationName) and scoped ScreenCaptureKit to that app on \(displayDescription(preferredDisplay))."
+            return ScreenCaptureSourceSelection(contentFilter: filter, summary: summary)
+        }
+
+        let filter = SCContentFilter(
+            display: preferredDisplay,
+            excludingApplications: [],
+            exceptingWindows: []
+        )
+        let summary = "Call capture active. No known call app was detected, so LoqBar is capturing system audio from \(displayDescription(preferredDisplay))."
+        return ScreenCaptureSourceSelection(contentFilter: filter, summary: summary)
+    }
+
+    private static func bestCallWindow(in content: SCShareableContent) -> SCWindow? {
+        let rankedWindows = content.windows
+            .filter { $0.isOnScreen }
+            .compactMap { window -> (SCWindow, Int)? in
+                guard let app = window.owningApplication else { return nil }
+                let appScore = callAppScore(for: app)
+                let titleScore = callWindowTitleScore(for: window.title)
+                let totalScore = appScore + titleScore
+                guard totalScore > 0 else { return nil }
+                return (window, totalScore)
+            }
+            .sorted { lhs, rhs in
+                if lhs.1 == rhs.1 {
+                    return windowArea(lhs.0.frame) > windowArea(rhs.0.frame)
+                }
+                return lhs.1 > rhs.1
+            }
+
+        return rankedWindows.first?.0
+    }
+
+    private static func bestCallApplication(in content: SCShareableContent) -> SCRunningApplication? {
+        content.applications
+            .map { ($0, callAppScore(for: $0)) }
+            .filter { $0.1 > 0 }
+            .sorted { $0.1 > $1.1 }
+            .first?
+            .0
+    }
+
+    private static func preferredDisplay(from content: SCShareableContent) -> SCDisplay {
+        if let mainDisplayID = NSScreen.main?
+            .deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
+           let matchedDisplay = content.displays.first(where: { $0.displayID == mainDisplayID }) {
+            return matchedDisplay
+        }
+
+        return content.displays.first!
+    }
+
+    private static func display(containing windowFrame: CGRect, from content: SCShareableContent) -> SCDisplay? {
+        content.displays
+            .map { ($0, intersectionArea($0.frame, windowFrame)) }
+            .filter { $0.1 > 0 }
+            .sorted { $0.1 > $1.1 }
+            .first?
+            .0
+    }
+
+    private static func displayDescription(_ display: SCDisplay) -> String {
+        let originX = Int(display.frame.origin.x.rounded())
+        let originY = Int(display.frame.origin.y.rounded())
+        return "display \(display.displayID) @ \(originX),\(originY)"
+    }
+
+    private static func callAppScore(for app: SCRunningApplication) -> Int {
+        let bundleIdentifier = app.bundleIdentifier.lowercased()
+        let applicationName = app.applicationName.lowercased()
+
+        if knownBundleIdentifiers.contains(bundleIdentifier) {
+            return 100
+        }
+
+        if browserBundleIdentifiers.contains(bundleIdentifier) {
+            return 20
+        }
+
+        if applicationName.contains("teams") ||
+            applicationName.contains("zoom") ||
+            applicationName.contains("facetime") ||
+            applicationName.contains("webex") ||
+            applicationName.contains("slack") ||
+            applicationName.contains("discord") {
+            return 40
+        }
+
+        return 0
+    }
+
+    private static func callWindowTitleScore(for title: String?) -> Int {
+        let normalizedTitle = (title ?? "").lowercased()
+        guard !normalizedTitle.isEmpty else { return 0 }
+
+        if normalizedTitle.contains("meeting") || normalizedTitle.contains("call") {
+            return 30
+        }
+
+        if normalizedTitle.contains("teams") ||
+            normalizedTitle.contains("zoom") ||
+            normalizedTitle.contains("webex") ||
+            normalizedTitle.contains("huddle") ||
+            normalizedTitle.contains("facetime") ||
+            normalizedTitle.contains("meet") {
+            return 50
+        }
+
+        return 0
+    }
+
+    private static func windowArea(_ rect: CGRect) -> CGFloat {
+        max(rect.width, 0) * max(rect.height, 0)
+    }
+
+    private static func intersectionArea(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
+        lhs.intersection(rhs).isNull ? 0 : windowArea(lhs.intersection(rhs))
+    }
+
+    private static let knownBundleIdentifiers: Set<String> = [
+        "com.microsoft.teams2",
+        "com.microsoft.teams",
+        "com.apple.facetime",
+        "us.zoom.xos",
+        "com.cisco.webexmeetingsapp",
+        "com.tinyspeck.slackmacgap",
+        "com.hnc.discord"
+    ]
+
+    private static let browserBundleIdentifiers: Set<String> = [
+        "com.apple.safari",
+        "com.google.chrome",
+        "com.google.chrome.canary",
+        "org.mozilla.firefox",
+        "com.microsoft.edgemac",
+        "com.brave.browser"
+    ]
+}
+#endif
 
 #if canImport(ScreenCaptureKit)
 private final class ScreenCaptureAudioOutput: NSObject, SCStreamOutput {
