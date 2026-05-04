@@ -210,11 +210,13 @@ struct TranscriptionService {
             return lhs.relativeOffset < rhs.relativeOffset
         }
 
-        if sortedSegments.isEmpty {
+        let repetitionReconciliation = collapseRepeatedSegments(sortedSegments)
+
+        if repetitionReconciliation.segments.isEmpty {
             throw AppError.transcriptionExecutionFailed("whisper.cpp ran, but produced no transcript segments for the selected audio sources.")
         }
 
-        let exportedSegments = sortedSegments.map { segment in
+        let exportedSegments = repetitionReconciliation.segments.map { segment in
             TranscriptSegment(
                 absoluteTimestamp: segment.absoluteTimestamp,
                 relativeOffset: segment.relativeOffset,
@@ -228,7 +230,7 @@ struct TranscriptionService {
         let speakersDetected = Set(exportedSegments.map(\.speakerLabel)).count
         let speakerRosterSuggestion = suggestedSpeakerRosterCount(
             for: plan,
-            mergedSegments: sortedSegments,
+            mergedSegments: repetitionReconciliation.segments,
             detectedSpeakerCount: max(speakersDetected, 1)
         )
         let languageNotes = mixedLanguageNotes(
@@ -238,7 +240,7 @@ struct TranscriptionService {
         let heuristicNotes = speakerRosterSuggestion > max(speakersDetected, 1)
             ? ["LoqBar provisioned \(speakerRosterSuggestion) generic speaker slots heuristically because the remote track looks like a many-participant call. This is a roster aid, not true diarization."]
             : []
-        let notes = executionNotes + languageNotes + reconciliation.notes + heuristicNotes
+        let notes = executionNotes + languageNotes + reconciliation.notes + repetitionReconciliation.notes + heuristicNotes
         let engineDescription = mergedEngineDescription(from: engineDescriptions)
         let resolvedLanguage = resolvedTranscriptLanguage(
             sourceLanguages: detectedLanguagesBySource,
@@ -374,7 +376,73 @@ struct TranscriptionService {
             return true
         }
 
+        if looksLikeBracketedPlaceholder(segment.text, normalized: normalized) {
+            return true
+        }
+
         return false
+    }
+
+    private func looksLikeBracketedPlaceholder(_ rawText: String, normalized: String) -> Bool {
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("[") && trimmed.hasSuffix("]") else { return false }
+
+        let tokens = normalizedTranscriptTokens(from: rawText)
+        guard !tokens.isEmpty, tokens.count <= 3 else { return false }
+
+        let placeholderLikeTokens: Set<String> = [
+            "blank", "audio", "silence", "noise", "music", "painting", "applause", "laughter", "inaudible", "unclear"
+        ]
+
+        return tokens.allSatisfy { placeholderLikeTokens.contains($0) }
+    }
+
+    private func collapseRepeatedSegments(_ segments: [MergeCandidateSegment]) -> RepeatReconciliationReport {
+        guard !segments.isEmpty else {
+            return RepeatReconciliationReport(segments: [], droppedRepeatCount: 0, notes: [])
+        }
+
+        var kept: [MergeCandidateSegment] = []
+        var droppedRepeatCount = 0
+
+        for segment in segments {
+            if let last = kept.last, segmentsLookLikeRepeatedLoop(last, segment) {
+                droppedRepeatCount += 1
+                continue
+            }
+
+            kept.append(segment)
+        }
+
+        var notes: [String] = []
+        if droppedRepeatCount > 0 {
+            notes.append("Merge reconciliation suppressed \(droppedRepeatCount) repeated transcript segment\(droppedRepeatCount == 1 ? "" : "s") that looked like a short repetition loop rather than new speech.")
+        }
+
+        return RepeatReconciliationReport(
+            segments: kept,
+            droppedRepeatCount: droppedRepeatCount,
+            notes: notes
+        )
+    }
+
+    private func segmentsLookLikeRepeatedLoop(_ lhs: MergeCandidateSegment, _ rhs: MergeCandidateSegment) -> Bool {
+        guard lhs.speakerLabel == rhs.speakerLabel else { return false }
+        guard lhs.source == rhs.source else { return false }
+
+        let similarity = transcriptSimilarity(lhs.text, rhs.text)
+        guard similarity >= 0.98 else { return false }
+
+        let lhsTokens = normalizedTranscriptTokens(from: lhs.text)
+        let rhsTokens = normalizedTranscriptTokens(from: rhs.text)
+        guard lhsTokens == rhsTokens else { return false }
+        guard !lhsTokens.isEmpty else { return false }
+
+        let startDelta = rhs.relativeOffset - lhs.relativeOffset
+        guard startDelta >= 0, startDelta <= 2.5 else { return false }
+
+        let textLength = lhs.text.trimmingCharacters(in: .whitespacesAndNewlines).count
+        return lhsTokens.count <= 10 && textLength <= 80
     }
 
     private func segmentLooksLikeStandaloneContent(_ segment: MergeCandidateSegment) -> Bool {
@@ -662,6 +730,12 @@ private struct MergeReconciliationReport {
     let droppedLowValueCount: Int
     let duplicateCount: Int
     let microphoneDuplicateCount: Int
+    let notes: [String]
+}
+
+private struct RepeatReconciliationReport {
+    let segments: [MergeCandidateSegment]
+    let droppedRepeatCount: Int
     let notes: [String]
 }
 

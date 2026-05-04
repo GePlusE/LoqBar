@@ -45,6 +45,49 @@ final class TranscriptionServiceTests: XCTestCase {
         XCTAssertTrue(content.analysis.notes.contains(where: { $0.contains("overlapping duplicate") }))
     }
 
+    func testMergeDropsBracketedJunkAndSuppressesRepeatedLoopSegments() throws {
+        let root = try makeTemporaryDirectory()
+        let settings = try makeSettings(root: root, computeMode: .cpuOnly)
+        let session = makeSession(
+            audioSourceType: .appAudioPlusMicrophone,
+            microphonePath: root.appendingPathComponent("microphone.flac").path,
+            systemAudioPath: root.appendingPathComponent("system.flac").path
+        )
+
+        let fakeTranscriber = FakeAudioTranscriber(
+            responses: [
+                root.appendingPathComponent("system.flac").path: WhisperTranscription(
+                    text: "Dann müssen wir das, Wissensstand.",
+                    language: "de",
+                    segments: [
+                        WhisperSegment(startTime: 0.0, endTime: 1.2, text: "[painting]"),
+                        WhisperSegment(startTime: 2.0, endTime: 3.1, text: "Dann müssen wir das, Wissensstand."),
+                        WhisperSegment(startTime: 3.2, endTime: 4.3, text: "Dann müssen wir das, Wissensstand."),
+                        WhisperSegment(startTime: 4.4, endTime: 5.5, text: "Dann müssen wir das, Wissensstand.")
+                    ],
+                    engineDescription: "fake-whisper",
+                    notes: []
+                ),
+                root.appendingPathComponent("microphone.flac").path: WhisperTranscription(
+                    text: "Ich höre zu",
+                    language: "de",
+                    segments: [],
+                    engineDescription: "fake-whisper",
+                    notes: []
+                )
+            ]
+        )
+
+        let service = TranscriptionService(whisperTranscriber: fakeTranscriber)
+        let plan = service.makePlan(for: session)
+        let content = try service.transcribe(plan: plan, session: session, settings: settings)
+
+        XCTAssertEqual(content.segments.count, 1)
+        XCTAssertEqual(content.segments.first?.text, "Dann müssen wir das, Wissensstand.")
+        XCTAssertTrue(content.analysis.notes.contains(where: { $0.contains("low-value segment") }))
+        XCTAssertTrue(content.analysis.notes.contains(where: { $0.contains("repeated transcript segment") }))
+    }
+
     func testSourceLanguageDisagreementMarksTranscriptAsMixed() throws {
         let root = try makeTemporaryDirectory()
         let settings = try makeSettings(root: root, computeMode: .auto)
