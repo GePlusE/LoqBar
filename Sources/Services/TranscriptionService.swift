@@ -123,8 +123,9 @@ struct TranscriptionService {
         configuration: WhisperConfiguration
     ) throws -> (segments: [TranscriptSegment], speakersDetected: Int, engineDescription: String, language: String?, notes: [String]) {
         var transcriptSegments: [MergeCandidateSegment] = []
-        var engineDescription = "whisper-cli"
+        var engineDescriptions: [String] = []
         var detectedLanguage: String?
+        var executionNotes: [String] = []
 
         for source in plan.preferredSources {
             let fileURL: URL?
@@ -142,7 +143,8 @@ struct TranscriptionService {
             guard let fileURL else { continue }
 
             let transcription = try whisperTranscriber.transcribe(audioFileURL: fileURL, configuration: configuration)
-            engineDescription = transcription.engineDescription
+            engineDescriptions.append(transcription.engineDescription)
+            executionNotes.append(contentsOf: transcription.notes)
             if detectedLanguage == nil {
                 let normalizedLanguage = transcription.language?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 detectedLanguage = normalizedLanguage.isEmpty ? nil : normalizedLanguage
@@ -189,7 +191,8 @@ struct TranscriptionService {
         }
 
         let speakersDetected = Set(exportedSegments.map(\.speakerLabel)).count
-        let notes = reconciliation.notes
+        let notes = executionNotes + reconciliation.notes
+        let engineDescription = mergedEngineDescription(from: engineDescriptions)
         return (exportedSegments, max(speakersDetected, 1), engineDescription, detectedLanguage, notes)
     }
 
@@ -381,6 +384,17 @@ struct TranscriptionService {
         case .unknown:
             return "Fallback export complete using \(engineDescription)."
         }
+    }
+
+    private func mergedEngineDescription(from descriptions: [String]) -> String {
+        let unique = Array(Set(descriptions)).sorted()
+        if unique.isEmpty {
+            return "whisper-cli"
+        }
+        if unique.count == 1, let first = unique.first {
+            return first
+        }
+        return unique.joined(separator: " + ")
     }
 }
 

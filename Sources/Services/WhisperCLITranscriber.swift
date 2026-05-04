@@ -21,18 +21,103 @@ struct WhisperCLITranscriber {
         let outputBaseURL = outputDirectory.appendingPathComponent("transcript")
         let jsonURL = outputBaseURL.appendingPathExtension("json")
         let txtURL = outputBaseURL.appendingPathExtension("txt")
+        let execution = try executeWhisperCLI(
+            preparedAudioURL: preparedAudioURL,
+            outputBaseURL: outputBaseURL,
+            configuration: configuration
+        )
 
+        let jsonData = try? Data(contentsOf: jsonURL)
+        let textData = try? Data(contentsOf: txtURL)
+
+        let parsed = jsonData.flatMap(parseJSONTranscription(data:))
+        let text = parsed?.text
+            ?? textData.flatMap { String(data: $0, encoding: .utf8) }?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? ""
+
+        let segments = parsed?.segments ?? fallbackSegments(from: text)
+        let language = parsed?.language ?? configuration.language
+
+        return WhisperTranscription(
+            text: text,
+            language: language,
+            segments: segments,
+            engineDescription: execution.engineDescription,
+            notes: execution.notes
+        )
+    }
+
+    private func executeWhisperCLI(
+        preparedAudioURL: URL,
+        outputBaseURL: URL,
+        configuration: WhisperConfiguration
+    ) throws -> WhisperCLIExecutionResult {
+        let attempts = executionAttempts(for: configuration)
+        var failures: [WhisperCLIAttemptFailure] = []
+
+        for (index, attempt) in attempts.enumerated() {
+            let result = try runWhisperCLI(
+                preparedAudioURL: preparedAudioURL,
+                outputBaseURL: outputBaseURL,
+                configuration: configuration,
+                attempt: attempt
+            )
+
+            if result.terminationStatus == 0 {
+                var notes: [String] = []
+                if index > 0, let previousFailure = failures.last {
+                    notes.append("LoqBar retried transcription in CPU-only mode after the accelerated path failed: \(previousFailure.summary)")
+                } else if attempt.computeMode == .gpu {
+                    notes.append("LoqBar used GPU/Metal acceleration for this transcription run.")
+                }
+
+                return WhisperCLIExecutionResult(
+                    engineDescription: attempt.computeMode == .cpuOnly ? "whisper-cli (CPU)" : "whisper-cli (GPU/Metal)",
+                    notes: notes
+                )
+            }
+
+            let failure = WhisperCLIAttemptFailure(
+                mode: attempt.computeMode,
+                terminationStatus: result.terminationStatus,
+                stderrText: result.stderrText
+            )
+            failures.append(failure)
+        }
+
+        let failureSummary = failures.map(\.summary).joined(separator: " Then ")
+        throw AppError.transcriptionExecutionFailed(failureSummary)
+    }
+
+    private func executionAttempts(for configuration: WhisperConfiguration) -> [WhisperCLIExecutionAttempt] {
+        switch configuration.computeMode {
+        case .cpuOnly:
+            return [.cpuOnly]
+        case .auto, .gpuPreferred:
+            return [.gpu, .cpuOnly]
+        }
+    }
+
+    private func runWhisperCLI(
+        preparedAudioURL: URL,
+        outputBaseURL: URL,
+        configuration: WhisperConfiguration,
+        attempt: WhisperCLIExecutionAttempt
+    ) throws -> WhisperCLIExecutionOutcome {
         let process = Process()
         process.executableURL = configuration.executableURL
 
         var arguments = [
             "-m", configuration.modelURL.path,
             "-f", preparedAudioURL.path,
-            "-ng",
             "--output-json",
             "--output-txt",
             "--output-file", outputBaseURL.path
         ]
+
+        if attempt.computeMode == .cpuOnly {
+            arguments.append("-ng")
+        }
 
         if let language = configuration.language {
             arguments += ["-l", language]
@@ -50,29 +135,9 @@ struct WhisperCLITranscriber {
         let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
         let stderrText = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-        guard process.terminationStatus == 0 else {
-            let message = stderrText.isEmpty
-                ? "whisper-cli exited with status \(process.terminationStatus)."
-                : "whisper-cli exited with status \(process.terminationStatus): \(stderrText)"
-            throw AppError.transcriptionExecutionFailed(message)
-        }
-
-        let jsonData = try? Data(contentsOf: jsonURL)
-        let textData = try? Data(contentsOf: txtURL)
-
-        let parsed = jsonData.flatMap(parseJSONTranscription(data:))
-        let text = parsed?.text
-            ?? textData.flatMap { String(data: $0, encoding: .utf8) }?.trimmingCharacters(in: .whitespacesAndNewlines)
-            ?? ""
-
-        let segments = parsed?.segments ?? fallbackSegments(from: text)
-        let language = parsed?.language ?? configuration.language
-
-        return WhisperTranscription(
-            text: text,
-            language: language,
-            segments: segments,
-            engineDescription: "whisper-cli"
+        return WhisperCLIExecutionOutcome(
+            terminationStatus: process.terminationStatus,
+            stderrText: stderrText
         )
     }
 
@@ -107,7 +172,8 @@ struct WhisperCLITranscriber {
             text: fullText,
             language: language,
             segments: segments,
-            engineDescription: "whisper-cli"
+            engineDescription: "whisper-cli",
+            notes: []
         )
     }
 
@@ -167,5 +233,41 @@ struct WhisperCLITranscriber {
             return Double(value)
         }
         return nil
+    }
+}
+
+private enum WhisperCLIAttemptComputeMode {
+    case gpu
+    case cpuOnly
+}
+
+private struct WhisperCLIExecutionAttempt {
+    let computeMode: WhisperCLIAttemptComputeMode
+
+    static let gpu = WhisperCLIExecutionAttempt(computeMode: .gpu)
+    static let cpuOnly = WhisperCLIExecutionAttempt(computeMode: .cpuOnly)
+}
+
+private struct WhisperCLIExecutionOutcome {
+    let terminationStatus: Int32
+    let stderrText: String
+}
+
+private struct WhisperCLIExecutionResult {
+    let engineDescription: String
+    let notes: [String]
+}
+
+private struct WhisperCLIAttemptFailure {
+    let mode: WhisperCLIAttemptComputeMode
+    let terminationStatus: Int32
+    let stderrText: String
+
+    var summary: String {
+        let modeLabel = mode == .gpu ? "GPU/Metal attempt" : "CPU-only attempt"
+        if stderrText.isEmpty {
+            return "\(modeLabel) exited with status \(terminationStatus)."
+        }
+        return "\(modeLabel) exited with status \(terminationStatus): \(stderrText)"
     }
 }

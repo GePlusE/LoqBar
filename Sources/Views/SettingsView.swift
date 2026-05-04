@@ -280,6 +280,20 @@ struct SettingsView: View {
                 body: modelQualityGuidanceText
             )
 
+            settingsField("Transcription Mode") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Picker("Transcription mode", selection: $appModel.settings.transcriptionComputeMode) {
+                        ForEach(TranscriptionComputeMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 260, alignment: .leading)
+
+                    infoText("`Auto` tries the best available local acceleration path and falls back safely if needed. `GPU Preferred` explicitly tries Metal/GPU first, then retries on CPU if acceleration fails. `CPU Only` preserves the most conservative behavior, but it is also the slowest.")
+                }
+            }
+
             settingsField("Language") {
                 Picker("Language", selection: Binding(
                     get: { TranscriptionLanguageOption(rawValue: appModel.settings.transcriptionLanguage) ?? .auto },

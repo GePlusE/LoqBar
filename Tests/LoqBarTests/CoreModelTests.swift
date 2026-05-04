@@ -53,6 +53,41 @@ final class CoreModelTests: XCTestCase {
         XCTAssertTrue(status.detailLines.contains(where: { $0.contains(executableURL.path) }))
     }
 
+    func testWhisperConfigurationCarriesSelectedComputeMode() throws {
+        let root = try makeTemporaryDirectory()
+        var settings = makeSettings(storageRoot: root.path, modelIdentifier: "small")
+        settings.transcriptionComputeMode = .gpuPreferred
+
+        try createExecutable(at: URL(fileURLWithPath: settings.managedTranscriptionExecutablePath))
+        try createFile(at: URL(fileURLWithPath: settings.managedTranscriptionModelPath), contents: "model")
+
+        let configuration = try XCTUnwrap(WhisperConfiguration.from(settings: settings))
+
+        XCTAssertEqual(configuration.computeMode, .gpuPreferred)
+    }
+
+    func testLegacySettingsDecodeDefaultsToAutoComputeMode() throws {
+        let json = """
+        {
+          "storageRootFolder": "\(tempRoot().path)",
+          "audioRetentionPolicy": "days90",
+          "defaultCaptureMode": "auto",
+          "customVocabularyEntries": [],
+          "transcriptionModelIdentifier": "base",
+          "transcriptionExecutablePath": "",
+          "transcriptionModelPath": "",
+          "transcriptionLanguage": "auto",
+          "autoCleanupEnabled": true,
+          "launchAtLoginEnabled": false,
+          "firstRunCompleted": false
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: Data(json.utf8))
+
+        XCTAssertEqual(decoded.transcriptionComputeMode, .auto)
+    }
+
     func testSpeakerLabelsExpandToCoverAliasesAndReassignments() {
         let session = SessionRecord(
             id: UUID(),
@@ -126,6 +161,7 @@ final class CoreModelTests: XCTestCase {
             defaultCaptureMode: .auto,
             customVocabularyEntries: [],
             transcriptionModelIdentifier: modelIdentifier,
+            transcriptionComputeMode: .auto,
             transcriptionExecutablePath: "",
             transcriptionModelPath: "",
             transcriptionLanguage: "auto",

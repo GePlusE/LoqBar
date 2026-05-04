@@ -5,6 +5,7 @@ struct WhisperConfiguration {
     let modelURL: URL
     let language: String?
     let source: WhisperConfigurationSource
+    let computeMode: TranscriptionComputeMode
 
     static func from(settings: AppSettings, languageOverride: String? = nil) -> WhisperConfiguration? {
         let fileManager = FileManager.default
@@ -37,7 +38,8 @@ struct WhisperConfiguration {
             executableURL: URL(fileURLWithPath: executablePath),
             modelURL: URL(fileURLWithPath: modelPath),
             language: languageValue == "auto" || languageValue.isEmpty ? nil : languageValue,
-            source: source
+            source: source,
+            computeMode: settings.transcriptionComputeMode
         )
     }
 }
@@ -213,4 +215,5 @@ struct WhisperTranscription {
     let language: String?
     let segments: [WhisperSegment]
     let engineDescription: String
+    let notes: [String]
 }

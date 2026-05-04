@@ -108,12 +108,43 @@ enum TranscriptionModelSuggestion: String, CaseIterable, Identifiable, Sendable 
     }
 }
 
+enum TranscriptionComputeMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case auto
+    case gpuPreferred
+    case cpuOnly
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .auto:
+            return "Auto"
+        case .gpuPreferred:
+            return "GPU Preferred"
+        case .cpuOnly:
+            return "CPU Only"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .auto:
+            return "Use the best local acceleration path when available, then fall back safely."
+        case .gpuPreferred:
+            return "Try Metal/GPU first and retry on CPU if acceleration fails."
+        case .cpuOnly:
+            return "Most conservative mode. Slowest, but avoids GPU/Metal entirely."
+        }
+    }
+}
+
 struct AppSettings: Codable, Sendable {
     var storageRootFolder: String
     var audioRetentionPolicy: AudioRetentionPolicy
     var defaultCaptureMode: CaptureMode
     var customVocabularyEntries: [String]
     var transcriptionModelIdentifier: String
+    var transcriptionComputeMode: TranscriptionComputeMode
     var transcriptionExecutablePath: String
     var transcriptionModelPath: String
     var transcriptionLanguage: String
@@ -130,6 +161,7 @@ struct AppSettings: Codable, Sendable {
         case defaultCaptureMode
         case customVocabularyEntries
         case transcriptionModelIdentifier
+        case transcriptionComputeMode
         case transcriptionExecutablePath
         case transcriptionModelPath
         case transcriptionLanguage
@@ -147,6 +179,7 @@ struct AppSettings: Codable, Sendable {
         defaultCaptureMode: .auto,
         customVocabularyEntries: [],
         transcriptionModelIdentifier: "base",
+        transcriptionComputeMode: .auto,
         transcriptionExecutablePath: "",
         transcriptionModelPath: "",
         transcriptionLanguage: "auto",
@@ -164,6 +197,7 @@ struct AppSettings: Codable, Sendable {
         defaultCaptureMode: CaptureMode,
         customVocabularyEntries: [String],
         transcriptionModelIdentifier: String,
+        transcriptionComputeMode: TranscriptionComputeMode,
         transcriptionExecutablePath: String,
         transcriptionModelPath: String,
         transcriptionLanguage: String,
@@ -179,6 +213,7 @@ struct AppSettings: Codable, Sendable {
         self.defaultCaptureMode = defaultCaptureMode
         self.customVocabularyEntries = customVocabularyEntries
         self.transcriptionModelIdentifier = transcriptionModelIdentifier
+        self.transcriptionComputeMode = transcriptionComputeMode
         self.transcriptionExecutablePath = transcriptionExecutablePath
         self.transcriptionModelPath = transcriptionModelPath
         self.transcriptionLanguage = transcriptionLanguage
@@ -262,6 +297,7 @@ struct AppSettings: Codable, Sendable {
         defaultCaptureMode = try container.decodeIfPresent(CaptureMode.self, forKey: .defaultCaptureMode) ?? AppSettings.defaultValue.defaultCaptureMode
         customVocabularyEntries = try container.decodeIfPresent([String].self, forKey: .customVocabularyEntries) ?? AppSettings.defaultValue.customVocabularyEntries
         transcriptionModelIdentifier = try container.decodeIfPresent(String.self, forKey: .transcriptionModelIdentifier) ?? AppSettings.defaultValue.transcriptionModelIdentifier
+        transcriptionComputeMode = try container.decodeIfPresent(TranscriptionComputeMode.self, forKey: .transcriptionComputeMode) ?? AppSettings.defaultValue.transcriptionComputeMode
         transcriptionExecutablePath = try container.decodeIfPresent(String.self, forKey: .transcriptionExecutablePath) ?? AppSettings.defaultValue.transcriptionExecutablePath
         transcriptionModelPath = try container.decodeIfPresent(String.self, forKey: .transcriptionModelPath) ?? AppSettings.defaultValue.transcriptionModelPath
         transcriptionLanguage = try container.decodeIfPresent(String.self, forKey: .transcriptionLanguage) ?? AppSettings.defaultValue.transcriptionLanguage
@@ -271,6 +307,25 @@ struct AppSettings: Codable, Sendable {
         launchAtLoginEnabled = try container.decodeIfPresent(Bool.self, forKey: .launchAtLoginEnabled) ?? AppSettings.defaultValue.launchAtLoginEnabled
         firstRunCompleted = try container.decodeIfPresent(Bool.self, forKey: .firstRunCompleted) ?? AppSettings.defaultValue.firstRunCompleted
         lastLaunchedAppVersion = try container.decodeIfPresent(String.self, forKey: .lastLaunchedAppVersion)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(storageRootFolder, forKey: .storageRootFolder)
+        try container.encode(audioRetentionPolicy, forKey: .audioRetentionPolicy)
+        try container.encode(defaultCaptureMode, forKey: .defaultCaptureMode)
+        try container.encode(customVocabularyEntries, forKey: .customVocabularyEntries)
+        try container.encode(transcriptionModelIdentifier, forKey: .transcriptionModelIdentifier)
+        try container.encode(transcriptionComputeMode, forKey: .transcriptionComputeMode)
+        try container.encode(transcriptionExecutablePath, forKey: .transcriptionExecutablePath)
+        try container.encode(transcriptionModelPath, forKey: .transcriptionModelPath)
+        try container.encode(transcriptionLanguage, forKey: .transcriptionLanguage)
+        try container.encode(autoCleanupEnabled, forKey: .autoCleanupEnabled)
+        try container.encodeIfPresent(lastCleanupAt, forKey: .lastCleanupAt)
+        try container.encodeIfPresent(lastCleanupSummary, forKey: .lastCleanupSummary)
+        try container.encode(launchAtLoginEnabled, forKey: .launchAtLoginEnabled)
+        try container.encode(firstRunCompleted, forKey: .firstRunCompleted)
+        try container.encodeIfPresent(lastLaunchedAppVersion, forKey: .lastLaunchedAppVersion)
     }
 }
 
