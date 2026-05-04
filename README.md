@@ -111,6 +111,20 @@ If macOS shows LoqBar as enabled for screen/system-audio recording, but LoqBar s
 
 This repairs a stale macOS `ScreenCapture` permission state that can occasionally survive normal toggling in System Settings, especially after manual app replacement during updates.
 
+### Structured logs
+
+LoqBar now keeps a local structured event log here:
+
+- `~/Library/Application Support/LoqBar/Logs/events.jsonl`
+
+The log is newline-delimited JSON and is designed to help with debugging and agent-assisted analysis without storing full transcript text. It is especially useful for checking:
+
+- transcription start/finish timing
+- model, language, and compute mode used
+- GPU/CPU fallback behavior
+- audio cleanup activity
+- storage write failures
+
 ## Transcription setup
 
 Recording works on its own. Transcription is optional and can be completed later.

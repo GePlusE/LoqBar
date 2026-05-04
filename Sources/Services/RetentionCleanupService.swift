@@ -27,9 +27,16 @@ struct RetentionCleanupResult {
 
 struct RetentionCleanupService {
     private let fileManager = FileManager.default
+    private let logger = AppEventLogger.shared
 
     func run(sessions: [SessionRecord], settings: AppSettings, now: Date = Date()) -> RetentionCleanupResult {
+        let startedAt = Date()
         guard settings.autoCleanupEnabled else {
+            logger.log(
+                category: "cleanup",
+                name: "cleanup_skipped",
+                metadata: ["reason": "auto_cleanup_disabled"]
+            )
             return RetentionCleanupResult(
                 sessions: sessions,
                 deletedFileCount: 0,
@@ -39,6 +46,11 @@ struct RetentionCleanupService {
         }
 
         guard let cutoffDate = settings.audioRetentionPolicy.cutoffDate(relativeTo: now) else {
+            logger.log(
+                category: "cleanup",
+                name: "cleanup_skipped",
+                metadata: ["reason": "retention_policy_keep_forever"]
+            )
             return RetentionCleanupResult(
                 sessions: sessions,
                 deletedFileCount: 0,
@@ -77,12 +89,26 @@ struct RetentionCleanupService {
             }
         }
 
-        return RetentionCleanupResult(
+        let result = RetentionCleanupResult(
             sessions: updatedSessions,
             deletedFileCount: deletedFileCount,
             deletedSessionFolderCount: deletedSessionFolderCount,
             affectedSessionCount: affectedSessionIDs.count
         )
+
+        logger.log(
+            category: "cleanup",
+            name: "cleanup_finished",
+            metadata: [
+                "duration_ms": String(Int(Date().timeIntervalSince(startedAt) * 1000)),
+                "deleted_file_count": String(result.deletedFileCount),
+                "deleted_session_folder_count": String(result.deletedSessionFolderCount),
+                "affected_session_count": String(result.affectedSessionCount),
+                "policy": settings.audioRetentionPolicy.title
+            ]
+        )
+
+        return result
     }
 
     private func shouldPruneAudio(for session: SessionRecord, cutoffDate: Date) -> Bool {
@@ -102,6 +128,14 @@ struct RetentionCleanupService {
             try fileManager.removeItem(atPath: path)
             return true
         } catch {
+            logger.log(
+                category: "cleanup",
+                name: "file_remove_failed",
+                metadata: [
+                    "path": path,
+                    "error": error.localizedDescription
+                ]
+            )
             NSLog("LoqBar cleanup could not remove \(path): \(error.localizedDescription)")
             return false
         }
@@ -123,6 +157,14 @@ struct RetentionCleanupService {
             try fileManager.removeItem(at: folderURL)
             return true
         } catch {
+            logger.log(
+                category: "cleanup",
+                name: "folder_remove_failed",
+                metadata: [
+                    "path": folderURL.path,
+                    "error": error.localizedDescription
+                ]
+            )
             NSLog("LoqBar cleanup could not remove empty folder \(folderURL.path): \(error.localizedDescription)")
             return false
         }

@@ -226,7 +226,21 @@ enum SessionBackgroundProcessor {
         request: BackgroundProcessingRequest,
         settings: AppSettings
     ) -> BackgroundProcessingOutcome {
+        let logger = AppEventLogger.shared
         var workingSession = request.session
+        let processingStartedAt = Date()
+
+        logger.log(
+            category: "background_processing",
+            name: "session_processing_started",
+            sessionID: workingSession.id,
+            metadata: [
+                "should_optimize_audio": String(request.shouldOptimizeAudio),
+                "has_microphone_audio": String(workingSession.audioPath != nil),
+                "has_system_audio": String(workingSession.systemAudioPath != nil),
+                "capture_mode": workingSession.captureMode.rawValue
+            ]
+        )
 
         let optimizer = AudioStorageOptimizer()
         let transcriptionService = TranscriptionService()
@@ -234,9 +248,20 @@ enum SessionBackgroundProcessor {
 
         let optimizedAudio: OptimizedAudioFiles?
         if request.shouldOptimizeAudio {
+            let optimizationStartedAt = Date()
             optimizedAudio = try? optimizer.optimize(
                 microphoneFileURL: workingSession.audioPath.map(URL.init(fileURLWithPath:)),
                 systemAudioFileURL: workingSession.systemAudioPath.map(URL.init(fileURLWithPath:))
+            )
+            logger.log(
+                category: "background_processing",
+                name: optimizedAudio == nil ? "audio_optimization_skipped_or_failed" : "audio_optimization_finished",
+                sessionID: workingSession.id,
+                metadata: [
+                    "duration_ms": String(Int(Date().timeIntervalSince(optimizationStartedAt) * 1000)),
+                    "microphone_optimized": String(optimizedAudio?.microphoneFileURL != nil),
+                    "system_audio_optimized": String(optimizedAudio?.systemAudioFileURL != nil)
+                ]
             )
         } else {
             optimizedAudio = nil
@@ -263,6 +288,20 @@ enum SessionBackgroundProcessor {
                 .compactMap { $0?.nilIfEmpty }
                 .joined(separator: " ")
 
+            logger.log(
+                category: "background_processing",
+                name: "session_processing_finished",
+                sessionID: workingSession.id,
+                metadata: [
+                    "duration_ms": String(Int(Date().timeIntervalSince(processingStartedAt) * 1000)),
+                    "warning_count": String(transcript.warningCount),
+                    "speakers_detected": String(transcript.speakersDetected),
+                    "speaker_slots_available": String(content.suggestedSpeakerRosterCount),
+                    "language": content.language,
+                    "transcript_path": transcript.path
+                ]
+            )
+
             return .success(
                 BackgroundProcessingSuccess(
                     audioPath: workingSession.audioPath,
@@ -277,6 +316,15 @@ enum SessionBackgroundProcessor {
             )
         } catch let error as AppError {
             let note = "Recording saved. Transcription pending: \(error.recoverySuggestion)"
+            logger.log(
+                category: "background_processing",
+                name: "session_processing_failed",
+                sessionID: workingSession.id,
+                metadata: [
+                    "duration_ms": String(Int(Date().timeIntervalSince(processingStartedAt) * 1000)),
+                    "error": error.recoverySuggestion
+                ]
+            )
             return .transcriptionPending(
                 BackgroundProcessingFailure(
                     audioPath: workingSession.audioPath,
@@ -290,6 +338,15 @@ enum SessionBackgroundProcessor {
                 "Recording finished and audio was saved, but transcription could not complete: \(error.localizedDescription)"
             )
             let note = "Recording saved. Transcription pending: \(appError.recoverySuggestion)"
+            logger.log(
+                category: "background_processing",
+                name: "session_processing_failed",
+                sessionID: workingSession.id,
+                metadata: [
+                    "duration_ms": String(Int(Date().timeIntervalSince(processingStartedAt) * 1000)),
+                    "error": appError.recoverySuggestion
+                ]
+            )
             return .transcriptionPending(
                 BackgroundProcessingFailure(
                     audioPath: workingSession.audioPath,

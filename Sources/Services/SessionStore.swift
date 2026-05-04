@@ -91,6 +91,14 @@ struct SessionStore {
             let data = try encoder.encode(value)
             try data.write(to: url, options: .atomic)
         } catch {
+            AppEventLogger.shared.log(
+                category: "storage",
+                name: "save_failed",
+                metadata: [
+                    "path": url.path,
+                    "error": error.localizedDescription
+                ]
+            )
             NSLog("LoqBar store write failed: \(error.localizedDescription)")
         }
     }
@@ -103,9 +111,11 @@ enum StoragePaths {
     static let defaultStorageRootFolder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("LoqBar", isDirectory: true)
     static let transcriptionScratchFolder = appSupportFolder.appendingPathComponent("TranscriptionScratch", isDirectory: true)
+    static let logsFolder = appSupportFolder.appendingPathComponent("Logs", isDirectory: true)
 
     static let settingsFile = appSupportFolder.appendingPathComponent("settings.json")
     static let sessionsFile = appSupportFolder.appendingPathComponent("sessions.json")
+    static let eventsLogFile = logsFolder.appendingPathComponent("events.jsonl")
 
     static func sessionRecordingFolder(rootFolderPath: String, for sessionID: UUID) -> URL {
         URL(fileURLWithPath: rootFolderPath, isDirectory: true)

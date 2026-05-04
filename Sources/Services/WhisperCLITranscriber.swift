@@ -5,6 +5,8 @@ protocol AudioTranscribing {
 }
 
 struct WhisperCLITranscriber: AudioTranscribing {
+    private let logger = AppEventLogger.shared
+
     func transcribe(audioFileURL: URL, configuration: WhisperConfiguration) throws -> WhisperTranscription {
         let fileManager = FileManager.default
         guard fileManager.isExecutableFile(atPath: configuration.executableURL.path) else {
@@ -19,6 +21,18 @@ struct WhisperCLITranscriber: AudioTranscribing {
 
         let outputDirectory = StoragePaths.transcriptionScratchFolder.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try fileManager.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+
+        let transcriptionStartedAt = Date()
+        logger.log(
+            category: "transcription",
+            name: "transcribe_started",
+            metadata: [
+                "audio_file": audioFileURL.lastPathComponent,
+                "model": configuration.modelURL.lastPathComponent,
+                "language": configuration.language ?? "auto",
+                "compute_mode": configuration.computeMode.rawValue
+            ]
+        )
 
         let preparedAudioURL = try prepareAudioInputIfNeeded(audioFileURL, outputDirectory: outputDirectory)
 
@@ -42,6 +56,19 @@ struct WhisperCLITranscriber: AudioTranscribing {
         let segments = parsed?.segments ?? fallbackSegments(from: text)
         let language = parsed?.language ?? configuration.language
 
+        logger.log(
+            category: "transcription",
+            name: "transcribe_finished",
+            metadata: [
+                "audio_file": audioFileURL.lastPathComponent,
+                "engine": execution.engineDescription,
+                "language": language ?? "unknown",
+                "segment_count": String(segments.count),
+                "duration_ms": String(Int(Date().timeIntervalSince(transcriptionStartedAt) * 1000)),
+                "note_count": String(execution.notes.count)
+            ]
+        )
+
         return WhisperTranscription(
             text: text,
             language: language,
@@ -60,11 +87,36 @@ struct WhisperCLITranscriber: AudioTranscribing {
         var failures: [WhisperCLIAttemptFailure] = []
 
         for (index, attempt) in attempts.enumerated() {
+            let attemptStartedAt = Date()
+            logger.log(
+                category: "transcription",
+                name: "whisper_attempt_started",
+                metadata: [
+                    "audio_file": preparedAudioURL.lastPathComponent,
+                    "attempt_index": String(index),
+                    "attempt_mode": attempt.computeMode.description,
+                    "model": configuration.modelURL.lastPathComponent,
+                    "language": configuration.language ?? "auto"
+                ]
+            )
             let result = try runWhisperCLI(
                 preparedAudioURL: preparedAudioURL,
                 outputBaseURL: outputBaseURL,
                 configuration: configuration,
                 attempt: attempt
+            )
+
+            logger.log(
+                category: "transcription",
+                name: result.terminationStatus == 0 ? "whisper_attempt_succeeded" : "whisper_attempt_failed",
+                metadata: [
+                    "audio_file": preparedAudioURL.lastPathComponent,
+                    "attempt_index": String(index),
+                    "attempt_mode": attempt.computeMode.description,
+                    "termination_status": String(result.terminationStatus),
+                    "duration_ms": String(Int(Date().timeIntervalSince(attemptStartedAt) * 1000)),
+                    "stderr": result.stderrText.nilIfEmpty ?? "none"
+                ]
             )
 
             if result.terminationStatus == 0 {
@@ -210,11 +262,33 @@ struct WhisperCLITranscriber: AudioTranscribing {
         process.standardError = stderr
         process.standardOutput = Pipe()
 
+        let conversionStartedAt = Date()
+        logger.log(
+            category: "transcription",
+            name: "audio_conversion_started",
+            metadata: [
+                "source_file": audioFileURL.lastPathComponent,
+                "target_file": convertedURL.lastPathComponent
+            ]
+        )
+
         try process.run()
         process.waitUntilExit()
 
         let errorText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        logger.log(
+            category: "transcription",
+            name: process.terminationStatus == 0 ? "audio_conversion_finished" : "audio_conversion_failed",
+            metadata: [
+                "source_file": audioFileURL.lastPathComponent,
+                "target_file": convertedURL.lastPathComponent,
+                "duration_ms": String(Int(Date().timeIntervalSince(conversionStartedAt) * 1000)),
+                "termination_status": String(process.terminationStatus),
+                "stderr": errorText.nilIfEmpty ?? "none"
+            ]
+        )
 
         guard process.terminationStatus == 0 else {
             let message = errorText.isEmpty
@@ -243,6 +317,15 @@ struct WhisperCLITranscriber: AudioTranscribing {
 private enum WhisperCLIAttemptComputeMode {
     case gpu
     case cpuOnly
+
+    var description: String {
+        switch self {
+        case .gpu:
+            return "gpu"
+        case .cpuOnly:
+            return "cpu_only"
+        }
+    }
 }
 
 private struct WhisperCLIExecutionAttempt {
@@ -260,6 +343,12 @@ private struct WhisperCLIExecutionOutcome {
 private struct WhisperCLIExecutionResult {
     let engineDescription: String
     let notes: [String]
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
 }
 
 private struct WhisperCLIAttemptFailure {
