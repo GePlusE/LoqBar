@@ -55,6 +55,10 @@ struct WhisperCLITranscriber: AudioTranscribing {
 
         let segments = parsed?.segments ?? fallbackSegments(from: text)
         let language = parsed?.language ?? configuration.language
+        var userFacingNotes = execution.notes
+        userFacingNotes.append(
+            "Transcription runtime for \(audioFileURL.lastPathComponent): \(execution.engineDescription), requested mode \(configuration.computeMode.title), \(formattedDuration(execution.durationMilliseconds))."
+        )
 
         logger.log(
             category: "transcription",
@@ -74,7 +78,7 @@ struct WhisperCLITranscriber: AudioTranscribing {
             language: language,
             segments: segments,
             engineDescription: execution.engineDescription,
-            notes: execution.notes
+            notes: userFacingNotes
         )
     }
 
@@ -85,6 +89,7 @@ struct WhisperCLITranscriber: AudioTranscribing {
     ) throws -> WhisperCLIExecutionResult {
         let attempts = executionAttempts(for: configuration)
         var failures: [WhisperCLIAttemptFailure] = []
+        let overallStartedAt = Date()
 
         for (index, attempt) in attempts.enumerated() {
             let attemptStartedAt = Date()
@@ -129,7 +134,8 @@ struct WhisperCLITranscriber: AudioTranscribing {
 
                 return WhisperCLIExecutionResult(
                     engineDescription: attempt.computeMode == .cpuOnly ? "whisper-cli (CPU)" : "whisper-cli (GPU/Metal)",
-                    notes: notes
+                    notes: notes,
+                    durationMilliseconds: Int(Date().timeIntervalSince(overallStartedAt) * 1000)
                 )
             }
 
@@ -312,6 +318,19 @@ struct WhisperCLITranscriber: AudioTranscribing {
         }
         return nil
     }
+
+    private func formattedDuration(_ durationMilliseconds: Int) -> String {
+        let totalSeconds = max(Double(durationMilliseconds) / 1000, 0)
+        if totalSeconds < 1 {
+            return "\(durationMilliseconds) ms"
+        }
+        if totalSeconds < 60 {
+            return String(format: "%.1f s", totalSeconds)
+        }
+        let minutes = Int(totalSeconds) / 60
+        let seconds = Int(totalSeconds) % 60
+        return "\(minutes)m \(seconds)s"
+    }
 }
 
 private enum WhisperCLIAttemptComputeMode {
@@ -343,6 +362,7 @@ private struct WhisperCLIExecutionOutcome {
 private struct WhisperCLIExecutionResult {
     let engineDescription: String
     let notes: [String]
+    let durationMilliseconds: Int
 }
 
 private extension String {
