@@ -145,7 +145,7 @@ Once the app is signed with a real Developer ID identity, the next step is notar
 KEYCHAIN_PROFILE="YOUR_PROFILE" ./Packaging/notarize-app.sh
 ```
 
-A fuller release flow is documented in [Packaging/RELEASE_CHECKLIST.md](/Users/gepluse/Coding/LoqBar/Packaging/RELEASE_CHECKLIST.md).
+A fuller release flow is documented in [Packaging/RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
 
 ## Still missing
 

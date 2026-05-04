@@ -83,4 +83,4 @@ Expected result:
 
 - Avoid using the same person in the same room to simulate both the local and remote speakers; it makes acoustic bleed hard to interpret.
 - If removing headphones interrupts the test flow, use prerecorded speech or TTS on `MB2` instead of physically moving yourself between machines.
-- The current transcript export is still placeholder text; these tests validate capture routing, not transcription quality yet.
+- These tests primarily validate capture routing and source separation first. Transcription quality should be checked separately because model choice, language, background noise, and remote app behavior can still affect the final text.
