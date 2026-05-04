@@ -403,15 +403,24 @@ struct TranscriptionService {
         }
 
         var kept: [MergeCandidateSegment] = []
+        var seen: [MergeCandidateSegment] = []
         var droppedRepeatCount = 0
 
         for segment in segments {
             if let last = kept.last, segmentsLookLikeRepeatedLoop(last, segment) {
                 droppedRepeatCount += 1
+                seen.append(segment)
+                continue
+            }
+
+            if shouldDropAsRollingRepeatedLoop(segment, within: seen) {
+                droppedRepeatCount += 1
+                seen.append(segment)
                 continue
             }
 
             kept.append(segment)
+            seen.append(segment)
         }
 
         var notes: [String] = []
@@ -443,6 +452,48 @@ struct TranscriptionService {
 
         let textLength = lhs.text.trimmingCharacters(in: .whitespacesAndNewlines).count
         return lhsTokens.count <= 10 && textLength <= 80
+    }
+
+    private func shouldDropAsRollingRepeatedLoop(_ segment: MergeCandidateSegment, within seen: [MergeCandidateSegment]) -> Bool {
+        let tokens = normalizedTranscriptTokens(from: segment.text)
+        let textLength = segment.text.trimmingCharacters(in: .whitespacesAndNewlines).count
+        guard !tokens.isEmpty, tokens.count <= 10, textLength <= 80 else { return false }
+
+        let windowStart = segment.relativeOffset - 20
+        let recent = seen.filter { existing in
+            existing.relativeOffset >= windowStart &&
+            existing.relativeOffset < segment.relativeOffset &&
+            existing.speakerLabel == segment.speakerLabel &&
+            existing.source == segment.source
+        }
+
+        let matching = recent.filter { existing in
+            transcriptSimilarity(existing.text, segment.text) >= 0.98 &&
+            normalizedTranscriptTokens(from: existing.text) == tokens
+        }
+
+        guard let latestMatch = matching.last else { return false }
+
+        let nonTrivialInterveningContent = recent.contains { existing in
+            existing.relativeOffset > latestMatch.relativeOffset &&
+            !looksLikeSmallInterjection(existing)
+        }
+
+        if !nonTrivialInterveningContent && segment.relativeOffset - latestMatch.relativeOffset <= 4.0 {
+            return true
+        }
+
+        if matching.count >= 2 {
+            return true
+        }
+
+        return false
+    }
+
+    private func looksLikeSmallInterjection(_ segment: MergeCandidateSegment) -> Bool {
+        let tokens = normalizedTranscriptTokens(from: segment.text)
+        let trimmed = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !tokens.isEmpty && tokens.count <= 2 && trimmed.count <= 12
     }
 
     private func segmentLooksLikeStandaloneContent(_ segment: MergeCandidateSegment) -> Bool {
