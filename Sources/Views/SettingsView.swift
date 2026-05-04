@@ -295,16 +295,20 @@ struct SettingsView: View {
             }
 
             settingsField("Language") {
-                Picker("Language", selection: Binding(
-                    get: { TranscriptionLanguageOption(rawValue: appModel.settings.transcriptionLanguage) ?? .auto },
-                    set: { appModel.settings.transcriptionLanguage = $0.rawValue }
-                )) {
-                    ForEach(TranscriptionLanguageOption.allCases) { language in
-                        Text(language.title).tag(language)
+                VStack(alignment: .leading, spacing: 10) {
+                    Picker("Language", selection: Binding(
+                        get: { TranscriptionLanguageOption(rawValue: appModel.settings.transcriptionLanguage) ?? .auto },
+                        set: { appModel.settings.transcriptionLanguage = $0.rawValue }
+                    )) {
+                        ForEach(TranscriptionLanguageOption.allCases) { language in
+                            Text(language.title).tag(language)
+                        }
                     }
+                    .labelsHidden()
+                    .frame(maxWidth: 340, alignment: .leading)
+
+                    infoText("`Auto Detect` is the safest default for calls that may switch between languages, such as German and English in the same session.")
                 }
-                .labelsHidden()
-                .frame(maxWidth: 340, alignment: .leading)
             }
 
             infoCard(

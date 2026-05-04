@@ -124,7 +124,7 @@ struct TranscriptionService {
     ) throws -> (segments: [TranscriptSegment], speakersDetected: Int, engineDescription: String, language: String?, notes: [String]) {
         var transcriptSegments: [MergeCandidateSegment] = []
         var engineDescriptions: [String] = []
-        var detectedLanguage: String?
+        var detectedLanguagesBySource: [String: String] = [:]
         var executionNotes: [String] = []
 
         for source in plan.preferredSources {
@@ -145,9 +145,9 @@ struct TranscriptionService {
             let transcription = try whisperTranscriber.transcribe(audioFileURL: fileURL, configuration: configuration)
             engineDescriptions.append(transcription.engineDescription)
             executionNotes.append(contentsOf: transcription.notes)
-            if detectedLanguage == nil {
-                let normalizedLanguage = transcription.language?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                detectedLanguage = normalizedLanguage.isEmpty ? nil : normalizedLanguage
+            let normalizedLanguage = transcription.language?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !normalizedLanguage.isEmpty {
+                detectedLanguagesBySource[source.rawValue] = normalizedLanguage
             }
 
             let mappedSegments = transcription.segments.map { segment in
@@ -191,9 +191,17 @@ struct TranscriptionService {
         }
 
         let speakersDetected = Set(exportedSegments.map(\.speakerLabel)).count
-        let notes = executionNotes + reconciliation.notes
+        let languageNotes = mixedLanguageNotes(
+            sourceLanguages: detectedLanguagesBySource,
+            configuration: configuration
+        )
+        let notes = executionNotes + languageNotes + reconciliation.notes
         let engineDescription = mergedEngineDescription(from: engineDescriptions)
-        return (exportedSegments, max(speakersDetected, 1), engineDescription, detectedLanguage, notes)
+        let resolvedLanguage = resolvedTranscriptLanguage(
+            sourceLanguages: detectedLanguagesBySource,
+            fallback: configuration.language
+        )
+        return (exportedSegments, max(speakersDetected, 1), engineDescription, resolvedLanguage, notes)
     }
 
     private func reconcileSplitSourceSegments(_ segments: [MergeCandidateSegment]) -> MergeReconciliationReport {
@@ -395,6 +403,62 @@ struct TranscriptionService {
             return first
         }
         return unique.joined(separator: " + ")
+    }
+
+    private func resolvedTranscriptLanguage(
+        sourceLanguages: [String: String],
+        fallback: String?
+    ) -> String? {
+        let uniqueLanguages = Array(Set(sourceLanguages.values.map { $0.lowercased() })).sorted()
+
+        if uniqueLanguages.count > 1 {
+            return "mixed"
+        }
+
+        if let onlyLanguage = uniqueLanguages.first {
+            return onlyLanguage
+        }
+
+        return fallback
+    }
+
+    private func mixedLanguageNotes(
+        sourceLanguages: [String: String],
+        configuration: WhisperConfiguration
+    ) -> [String] {
+        let normalizedSourceLanguages = sourceLanguages
+            .mapValues { $0.lowercased() }
+        let uniqueLanguages = Array(Set(normalizedSourceLanguages.values)).sorted()
+
+        guard !normalizedSourceLanguages.isEmpty else {
+            if configuration.language != nil {
+                return ["LoqBar used a fixed transcription language. If a call switches between languages, `Auto Detect` is usually the safer retry option."]
+            }
+            return []
+        }
+
+        let detail = normalizedSourceLanguages
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: ", ")
+
+        if uniqueLanguages.count > 1 {
+            var notes = ["Mixed-language session detected across sources (\(detail)). LoqBar exported the transcript language as `mixed`."]
+            if configuration.language != nil {
+                notes.append("A fixed transcription language was configured. For multilingual calls, retrying with `Auto Detect` may improve accuracy.")
+            }
+            return notes
+        }
+
+        if let onlyLanguage = uniqueLanguages.first {
+            var notes = ["Detected transcript language: \(onlyLanguage) (\(detail))."]
+            if configuration.language != nil && configuration.language?.lowercased() != onlyLanguage {
+                notes.append("The configured retry language differed from the detected output language. For multilingual calls, `Auto Detect` may be more reliable.")
+            }
+            return notes
+        }
+
+        return []
     }
 }
 
