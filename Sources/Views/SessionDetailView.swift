@@ -108,6 +108,12 @@ struct SessionDetailView: View {
                     .disabled(session.isRecording || session.isProcessing || !session.hasTranscribableAudio)
                 }
 
+                if !session.hasTranscribableAudio {
+                    Text("Retry Transcription is unavailable because the original audio files are no longer present. Exported transcripts stay available even after audio cleanup.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 detailRow("Status") {
                     Text(session.displayStatusTitle)
                         .font(.subheadline.weight(.semibold))

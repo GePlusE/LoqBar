@@ -226,8 +226,8 @@ struct SettingsView: View {
                 """
             )
 
-            settingsField("Audio retention") {
-                Picker("Audio retention", selection: $appModel.settings.audioRetentionPolicy) {
+            settingsField("Audio file retention") {
+                Picker("Audio file retention", selection: $appModel.settings.audioRetentionPolicy) {
                     ForEach(AudioRetentionPolicy.allCases) { policy in
                         Text(policy.title).tag(policy)
                     }
@@ -236,7 +236,9 @@ struct SettingsView: View {
                 .frame(maxWidth: 340, alignment: .leading)
             }
 
-            Toggle("Automatic cleanup", isOn: $appModel.settings.autoCleanupEnabled)
+            Toggle("Automatically delete old audio files", isOn: $appModel.settings.autoCleanupEnabled)
+
+            infoText("This cleanup only removes old recording audio files after the selected retention period. Session entries and exported transcripts stay available.")
 
             infoCard(
                 title: "Cleanup Status",
