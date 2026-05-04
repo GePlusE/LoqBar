@@ -1,7 +1,11 @@
 import Foundation
 
 struct TranscriptionService {
-    private let whisperTranscriber = WhisperCLITranscriber()
+    private let whisperTranscriber: AudioTranscribing
+
+    init(whisperTranscriber: AudioTranscribing = WhisperCLITranscriber()) {
+        self.whisperTranscriber = whisperTranscriber
+    }
 
     func makePlan(for session: SessionRecord) -> TranscriptionPlan {
         let microphoneFileURL = session.audioPath.map(URL.init(fileURLWithPath:))

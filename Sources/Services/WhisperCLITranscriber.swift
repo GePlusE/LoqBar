@@ -1,6 +1,10 @@
 import Foundation
 
-struct WhisperCLITranscriber {
+protocol AudioTranscribing {
+    func transcribe(audioFileURL: URL, configuration: WhisperConfiguration) throws -> WhisperTranscription
+}
+
+struct WhisperCLITranscriber: AudioTranscribing {
     func transcribe(audioFileURL: URL, configuration: WhisperConfiguration) throws -> WhisperTranscription {
         let fileManager = FileManager.default
         guard fileManager.isExecutableFile(atPath: configuration.executableURL.path) else {
