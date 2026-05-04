@@ -150,6 +150,7 @@ struct TranscriptionService {
 
             let mappedSegments = transcription.segments.map { segment in
                 MergeCandidateSegment(
+                    id: UUID(),
                     absoluteTimestamp: sessionStart.addingTimeInterval(segment.startTime),
                     relativeOffset: segment.startTime,
                     relativeEndOffset: max(segment.endTime, segment.startTime),
@@ -164,8 +165,8 @@ struct TranscriptionService {
             transcriptSegments.append(contentsOf: mappedSegments)
         }
 
-        let mergedSegments = reconcileSplitSourceSegments(transcriptSegments)
-        let sortedSegments = mergedSegments.sorted { lhs, rhs in
+        let reconciliation = reconcileSplitSourceSegments(transcriptSegments)
+        let sortedSegments = reconciliation.segments.sorted { lhs, rhs in
             if lhs.relativeOffset == rhs.relativeOffset {
                 return lhs.sourcePriority < rhs.sourcePriority
             }
@@ -188,15 +189,15 @@ struct TranscriptionService {
         }
 
         let speakersDetected = Set(exportedSegments.map(\.speakerLabel)).count
-        let duplicateCount = transcriptSegments.count - sortedSegments.count
-        let notes = duplicateCount > 0
-            ? ["Merge reconciliation removed \(duplicateCount) overlapping duplicate segment\(duplicateCount == 1 ? "" : "s"), preferring system audio when both sources appeared to contain the same speech."]
-            : ["Merge reconciliation found no obvious duplicate overlap between microphone and system audio segments."]
+        let notes = reconciliation.notes
         return (exportedSegments, max(speakersDetected, 1), engineDescription, detectedLanguage, notes)
     }
 
-    private func reconcileSplitSourceSegments(_ segments: [MergeCandidateSegment]) -> [MergeCandidateSegment] {
-        let sorted = segments.sorted { lhs, rhs in
+    private func reconcileSplitSourceSegments(_ segments: [MergeCandidateSegment]) -> MergeReconciliationReport {
+        let filtered = segments.filter { !shouldDropSegment($0) }
+        let droppedLowValueCount = segments.count - filtered.count
+
+        let sorted = filtered.sorted { lhs, rhs in
             if lhs.relativeOffset == rhs.relativeOffset {
                 return lhs.sourcePriority < rhs.sourcePriority
             }
@@ -204,38 +205,85 @@ struct TranscriptionService {
         }
 
         var kept: [MergeCandidateSegment] = []
+        var duplicateCount = 0
+        var microphoneDuplicateCount = 0
 
         for segment in sorted {
             if let duplicateIndex = kept.firstIndex(where: { existing in
                 segmentsLikelyDuplicate(existing, segment)
             }) {
-                let preferred = preferredSegment(between: kept[duplicateIndex], and: segment)
+                let existing = kept[duplicateIndex]
+                let preferred = preferredSegment(between: existing, and: segment)
+                let discarded = preferred.id == existing.id ? segment : existing
+                if discarded.source == PreferredTranscriptSource.microphone.rawValue,
+                   preferred.source == PreferredTranscriptSource.systemAudio.rawValue {
+                    microphoneDuplicateCount += 1
+                }
+                duplicateCount += 1
                 kept[duplicateIndex] = preferred
             } else {
                 kept.append(segment)
             }
         }
 
-        return kept
+        var notes: [String] = []
+
+        if droppedLowValueCount > 0 {
+            notes.append("Merge reconciliation removed \(droppedLowValueCount) low-value segment\(droppedLowValueCount == 1 ? "" : "s") such as blank-audio placeholders before merging.")
+        }
+
+        if duplicateCount > 0 {
+            var duplicateNote = "Merge reconciliation removed \(duplicateCount) overlapping duplicate segment\(duplicateCount == 1 ? "" : "s")"
+            if microphoneDuplicateCount > 0 {
+                duplicateNote += ", including \(microphoneDuplicateCount) microphone segment\(microphoneDuplicateCount == 1 ? "" : "s") that appeared to be loudspeaker bleed from remote audio"
+            }
+            duplicateNote += "."
+            notes.append(duplicateNote)
+        }
+
+        if notes.isEmpty {
+            notes.append("Merge reconciliation found no obvious duplicate overlap between microphone and system audio segments.")
+        }
+
+        return MergeReconciliationReport(
+            segments: kept,
+            droppedLowValueCount: droppedLowValueCount,
+            duplicateCount: duplicateCount,
+            microphoneDuplicateCount: microphoneDuplicateCount,
+            notes: notes
+        )
     }
 
     private func segmentsLikelyDuplicate(_ lhs: MergeCandidateSegment, _ rhs: MergeCandidateSegment) -> Bool {
         guard lhs.source != rhs.source else { return false }
 
+        let similarity = transcriptSimilarity(lhs.text, rhs.text)
+        if segmentLooksLikeStandaloneContent(lhs) && segmentLooksLikeStandaloneContent(rhs) && similarity < 0.72 {
+            return false
+        }
+
         let overlap = overlappingDuration(lhs, rhs)
         let shorterDuration = max(min(lhs.duration, rhs.duration), 0.25)
         let overlapRatio = overlap / shorterDuration
         let startDelta = abs(lhs.relativeOffset - rhs.relativeOffset)
-        let similarity = transcriptSimilarity(lhs.text, rhs.text)
+        let tokenCountDelta = abs(normalizedTranscriptTokens(from: lhs.text).count - normalizedTranscriptTokens(from: rhs.text).count)
 
         let strongOverlap = overlapRatio >= 0.45
         let closeInTime = startDelta <= 1.2
         let textMatch = similarity >= 0.72
+        let likelyBleedCapture = overlapRatio >= 0.7 && similarity >= 0.55 && tokenCountDelta <= 2
 
-        return textMatch && (strongOverlap || closeInTime)
+        return (textMatch && (strongOverlap || closeInTime)) || likelyBleedCapture
     }
 
     private func preferredSegment(between lhs: MergeCandidateSegment, and rhs: MergeCandidateSegment) -> MergeCandidateSegment {
+        let lhsScore = segmentPreferenceScore(lhs)
+        let rhsScore = segmentPreferenceScore(rhs)
+
+        if lhsScore != rhsScore {
+            return lhsScore > rhsScore ? lhs : rhs
+        }
+
         if lhs.sourcePriority != rhs.sourcePriority {
             return lhs.sourcePriority < rhs.sourcePriority ? lhs : rhs
         }
@@ -245,6 +293,45 @@ struct TranscriptionService {
         }
 
         return lhs.duration >= rhs.duration ? lhs : rhs
+    }
+
+    private func shouldDropSegment(_ segment: MergeCandidateSegment) -> Bool {
+        let normalized = normalizedSegmentText(segment.text)
+
+        if normalized.isEmpty {
+            return true
+        }
+
+        let placeholderPhrases: Set<String> = [
+            "blank audio",
+            "silence",
+            "no speech",
+            "no captions"
+        ]
+
+        if placeholderPhrases.contains(normalized) {
+            return true
+        }
+
+        return false
+    }
+
+    private func segmentLooksLikeStandaloneContent(_ segment: MergeCandidateSegment) -> Bool {
+        let normalized = normalizedTranscriptTokens(from: segment.text)
+        return normalized.count >= 4 || segment.text.count >= 24 || segment.duration >= 3.5
+    }
+
+    private func segmentPreferenceScore(_ segment: MergeCandidateSegment) -> Int {
+        let tokenCount = normalizedTranscriptTokens(from: segment.text).count
+        let lengthScore = min(segment.text.count / 12, 4)
+        let durationScore = Int(min(segment.duration, 6).rounded(.down))
+        let sourceScore = segment.source == PreferredTranscriptSource.systemAudio.rawValue ? 3 : 0
+        let blankPenalty = shouldDropSegment(segment) ? -100 : 0
+        return blankPenalty + sourceScore + (tokenCount * 2) + lengthScore + durationScore
+    }
+
+    private func normalizedSegmentText(_ text: String) -> String {
+        normalizedTranscriptTokens(from: text).joined(separator: " ")
     }
 
     private func overlappingDuration(_ lhs: MergeCandidateSegment, _ rhs: MergeCandidateSegment) -> TimeInterval {
@@ -297,7 +384,16 @@ struct TranscriptionService {
     }
 }
 
+private struct MergeReconciliationReport {
+    let segments: [MergeCandidateSegment]
+    let droppedLowValueCount: Int
+    let duplicateCount: Int
+    let microphoneDuplicateCount: Int
+    let notes: [String]
+}
+
 private struct MergeCandidateSegment {
+    let id: UUID
     let absoluteTimestamp: Date
     let relativeOffset: TimeInterval
     let relativeEndOffset: TimeInterval
