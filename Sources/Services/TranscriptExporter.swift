@@ -36,6 +36,7 @@ struct TranscriptExporter {
         let analysisNotes = content.analysis.notes.map { "- \($0)" }.joined(separator: "\n")
         let manualCorrectionCount = session.transcriptEdits.count
         let speakerReassignmentCount = session.speakerAssignments.count
+        let speakerSlotsAvailable = max(content.suggestedSpeakerRosterCount, session.speakerLabels.count, content.speakersDetected)
         let transcriptBody = content.segments.enumerated().map { index, segment in
             let marker = segment.lowConfidence ? "[low confidence] " : ""
             let key = transcriptSegmentKey(for: segment)
@@ -103,6 +104,7 @@ struct TranscriptExporter {
         capture_mode: \(session.captureMode.rawValue)
         audio_source: \(session.audioSourceType.rawValue)
         speakers_detected: \(content.speakersDetected)
+        speaker_slots_available: \(speakerSlotsAvailable)
         speaker_aliases:
         \(speakerAliases.isEmpty ? "  {}" : speakerAliases)
         confidence_warnings: \(content.warningCount)

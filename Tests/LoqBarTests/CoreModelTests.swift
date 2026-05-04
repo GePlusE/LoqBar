@@ -88,6 +88,76 @@ final class CoreModelTests: XCTestCase {
         XCTAssertEqual(decoded.transcriptionComputeMode, .auto)
     }
 
+    func testTranscriptExportKeepsDetectedSpeakersSeparateFromAvailableSlots() throws {
+        let root = try makeTemporaryDirectory()
+        let settings = makeSettings(storageRoot: root.path, modelIdentifier: "small")
+        let transcriptExporter = TranscriptExporter()
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+
+        let session = SessionRecord(
+            id: UUID(),
+            title: "Remote Call",
+            createdAt: start,
+            startedAt: start,
+            endedAt: start.addingTimeInterval(120),
+            durationSeconds: 120,
+            status: .completed,
+            captureMode: .call,
+            audioSourceType: .appAudioPlusMicrophone,
+            transcriptPath: nil,
+            audioPath: "/tmp/microphone.flac",
+            systemAudioPath: "/tmp/system-audio.flac",
+            language: "de",
+            transcriptionLanguageOverride: nil,
+            speakerCount: 5,
+            aliasMapping: [:],
+            speakerAssignments: [:],
+            transcriptEdits: [:],
+            warningCount: 0,
+            notes: "",
+            sharedLinks: "",
+            contextNotes: ""
+        )
+
+        let content = TranscriptContent(
+            title: "Remote Call",
+            language: "de",
+            segments: [
+                TranscriptSegment(
+                    absoluteTimestamp: start,
+                    relativeOffset: 0,
+                    speakerLabel: "Speaker1",
+                    source: "systemAudio",
+                    text: "Hallo zusammen",
+                    lowConfidence: false
+                ),
+                TranscriptSegment(
+                    absoluteTimestamp: start.addingTimeInterval(2),
+                    relativeOffset: 2,
+                    speakerLabel: "Speaker2",
+                    source: "microphone",
+                    text: "Ich bin auch da",
+                    lowConfidence: false
+                )
+            ],
+            speakersDetected: 2,
+            suggestedSpeakerRosterCount: 5,
+            warningCount: 0,
+            summary: "Test transcript",
+            analysis: TranscriptionAnalysis(
+                primarySources: ["systemAudio", "microphone"],
+                notes: ["heuristic roster"],
+                engineDescription: "whisper-cli"
+            )
+        )
+
+        let export = try transcriptExporter.exportTranscript(for: session, settings: settings, content: content)
+        let markdown = try String(contentsOfFile: export.path, encoding: .utf8)
+
+        XCTAssertTrue(markdown.contains("speakers_detected: 2"))
+        XCTAssertTrue(markdown.contains("speaker_slots_available: 5"))
+    }
+
     func testSpeakerLabelsExpandToCoverAliasesAndReassignments() {
         let session = SessionRecord(
             id: UUID(),

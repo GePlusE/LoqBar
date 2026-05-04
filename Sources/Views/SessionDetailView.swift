@@ -156,6 +156,12 @@ struct SessionDetailView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
+                if session.speakerLabels.count > 2 && session.captureMode == .call {
+                    Text("This session has \(session.speakerLabels.count) editable speaker slots available. Extra remote slots may have been provisioned heuristically to make many-participant calls easier to label.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
                 if session.speakerLabels.isEmpty {
                     Text("Speaker aliases will appear after LoqBar detects speakers in the transcript.")
                         .foregroundStyle(.secondary)

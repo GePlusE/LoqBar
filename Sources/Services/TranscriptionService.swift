@@ -96,6 +96,7 @@ struct TranscriptionService {
             language: execution.language,
             segments: execution.segments,
             speakersDetected: execution.speakersDetected,
+            suggestedSpeakerRosterCount: execution.suggestedSpeakerRosterCount,
             warningCount: execution.segments.filter(\.lowConfidence).count,
             summary: execution.summary,
             analysis: execution.analysis
@@ -106,7 +107,7 @@ struct TranscriptionService {
         plan: TranscriptionPlan,
         start: Date,
         configuration: WhisperConfiguration
-    ) throws -> (segments: [TranscriptSegment], speakersDetected: Int, summary: String, analysis: TranscriptionAnalysis, language: String) {
+    ) throws -> (segments: [TranscriptSegment], speakersDetected: Int, suggestedSpeakerRosterCount: Int, summary: String, analysis: TranscriptionAnalysis, language: String) {
         let merged = try transcribePreferredSources(plan: plan, sessionStart: start, configuration: configuration)
         let analysis = TranscriptionAnalysis(
             primarySources: plan.preferredSources.map(\.rawValue),
@@ -114,14 +115,21 @@ struct TranscriptionService {
             engineDescription: merged.engineDescription
         )
         let resolvedLanguage = merged.language ?? configuration.language ?? "auto"
-        return (merged.segments, merged.speakersDetected, summaryText(for: plan, engineDescription: merged.engineDescription), analysis, resolvedLanguage)
+        return (
+            merged.segments,
+            merged.speakersDetected,
+            merged.suggestedSpeakerRosterCount,
+            summaryText(for: plan, engineDescription: merged.engineDescription),
+            analysis,
+            resolvedLanguage
+        )
     }
 
     private func transcribePreferredSources(
         plan: TranscriptionPlan,
         sessionStart: Date,
         configuration: WhisperConfiguration
-    ) throws -> (segments: [TranscriptSegment], speakersDetected: Int, engineDescription: String, language: String?, notes: [String]) {
+    ) throws -> (segments: [TranscriptSegment], speakersDetected: Int, suggestedSpeakerRosterCount: Int, engineDescription: String, language: String?, notes: [String]) {
         var transcriptSegments: [MergeCandidateSegment] = []
         var engineDescriptions: [String] = []
         var detectedLanguagesBySource: [String: String] = [:]
@@ -191,17 +199,32 @@ struct TranscriptionService {
         }
 
         let speakersDetected = Set(exportedSegments.map(\.speakerLabel)).count
+        let speakerRosterSuggestion = suggestedSpeakerRosterCount(
+            for: plan,
+            mergedSegments: sortedSegments,
+            detectedSpeakerCount: max(speakersDetected, 1)
+        )
         let languageNotes = mixedLanguageNotes(
             sourceLanguages: detectedLanguagesBySource,
             configuration: configuration
         )
-        let notes = executionNotes + languageNotes + reconciliation.notes
+        let heuristicNotes = speakerRosterSuggestion > max(speakersDetected, 1)
+            ? ["LoqBar provisioned \(speakerRosterSuggestion) generic speaker slots heuristically because the remote track looks like a many-participant call. This is a roster aid, not true diarization."]
+            : []
+        let notes = executionNotes + languageNotes + reconciliation.notes + heuristicNotes
         let engineDescription = mergedEngineDescription(from: engineDescriptions)
         let resolvedLanguage = resolvedTranscriptLanguage(
             sourceLanguages: detectedLanguagesBySource,
             fallback: configuration.language
         )
-        return (exportedSegments, max(speakersDetected, 1), engineDescription, resolvedLanguage, notes)
+        return (
+            exportedSegments,
+            max(speakersDetected, 1),
+            speakerRosterSuggestion,
+            engineDescription,
+            resolvedLanguage,
+            notes
+        )
     }
 
     private func reconcileSplitSourceSegments(_ segments: [MergeCandidateSegment]) -> MergeReconciliationReport {
@@ -459,6 +482,53 @@ struct TranscriptionService {
         }
 
         return []
+    }
+
+    private func suggestedSpeakerRosterCount(
+        for plan: TranscriptionPlan,
+        mergedSegments: [MergeCandidateSegment],
+        detectedSpeakerCount: Int
+    ) -> Int {
+        guard plan.preferredSources.contains(.systemAudio),
+              plan.preferredSources.contains(.microphone) else {
+            return detectedSpeakerCount
+        }
+
+        let substantialRemoteTurns = mergedSegments.filter { segment in
+            segment.source == PreferredTranscriptSource.systemAudio.rawValue &&
+            segmentLooksLikeSubstantialRemoteTurn(segment)
+        }.count
+
+        let estimatedRemoteSpeakers: Int
+        switch substantialRemoteTurns {
+        case 24...:
+            estimatedRemoteSpeakers = 6
+        case 18...:
+            estimatedRemoteSpeakers = 5
+        case 12...:
+            estimatedRemoteSpeakers = 4
+        case 8...:
+            estimatedRemoteSpeakers = 3
+        case 4...:
+            estimatedRemoteSpeakers = 2
+        default:
+            estimatedRemoteSpeakers = 1
+        }
+
+        let localSpeakerSlots = plan.microphoneFileURL == nil ? 0 : 1
+        let heuristicTotal = estimatedRemoteSpeakers + localSpeakerSlots
+        return max(detectedSpeakerCount, heuristicTotal)
+    }
+
+    private func segmentLooksLikeSubstantialRemoteTurn(_ segment: MergeCandidateSegment) -> Bool {
+        let tokenCount = normalizedTranscriptTokens(from: segment.text).count
+        if tokenCount >= 5 {
+            return true
+        }
+        if segment.text.count >= 28 {
+            return true
+        }
+        return segment.duration >= 2.4
     }
 }
 

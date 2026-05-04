@@ -72,7 +72,11 @@ extension AppModel {
             sessions[sessionIndex].status = .completed
             sessions[sessionIndex].transcriptPath = result.transcriptPath
             sessions[sessionIndex].warningCount = result.warningCount
-            sessions[sessionIndex].speakerCount = max(sessions[sessionIndex].speakerCount, result.speakerCount)
+            sessions[sessionIndex].speakerCount = max(
+                sessions[sessionIndex].speakerCount,
+                result.speakerCount,
+                result.suggestedSpeakerRosterCount
+            )
             sessions[sessionIndex].notes = result.notes
             sessions[sessionIndex].language = result.language
             persist()

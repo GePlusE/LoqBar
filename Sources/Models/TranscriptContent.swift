@@ -5,6 +5,7 @@ struct TranscriptContent: Sendable {
     let language: String
     let segments: [TranscriptSegment]
     let speakersDetected: Int
+    let suggestedSpeakerRosterCount: Int
     let warningCount: Int
     let summary: String
     let analysis: TranscriptionAnalysis

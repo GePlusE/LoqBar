@@ -305,7 +305,8 @@ struct TranscriptRevisionService {
         }.joined(separator: "\n")
         let preferredSources = headerValue(for: "preferred_transcript_sources", in: header) ?? ""
         let transcriptionEngine = headerValue(for: "transcription_engine", in: header) ?? ""
-        let speakersDetected = max(session.speakerCount, session.speakerLabels.count)
+        let speakersDetected = Int(headerValue(for: "speakers_detected", in: header) ?? "") ?? 1
+        let speakerSlotsAvailable = max(session.speakerLabels.count, session.speakerCount)
 
         return """
         ---
@@ -319,6 +320,7 @@ struct TranscriptRevisionService {
         capture_mode: \(session.captureMode.rawValue)
         audio_source: \(session.audioSourceType.rawValue)
         speakers_detected: \(speakersDetected)
+        speaker_slots_available: \(speakerSlotsAvailable)
         speaker_aliases:
         \(speakerAliases.isEmpty ? "  {}" : speakerAliases)
         confidence_warnings: \(session.warningCount)

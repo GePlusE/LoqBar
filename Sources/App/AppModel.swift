@@ -204,6 +204,7 @@ struct BackgroundProcessingSuccess: Sendable {
     let transcriptPath: String
     let warningCount: Int
     let speakerCount: Int
+    let suggestedSpeakerRosterCount: Int
     let notes: String
     let language: String
 }
@@ -269,6 +270,7 @@ enum SessionBackgroundProcessor {
                     transcriptPath: transcript.path,
                     warningCount: transcript.warningCount,
                     speakerCount: transcript.speakersDetected,
+                    suggestedSpeakerRosterCount: content.suggestedSpeakerRosterCount,
                     notes: note.isEmpty ? finalNotes : note,
                     language: content.language
                 )
