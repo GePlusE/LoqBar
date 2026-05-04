@@ -127,6 +127,62 @@ final class TranscriptionServiceTests: XCTestCase {
         XCTAssertTrue(content.analysis.notes.contains(where: { $0.contains("generic speaker slots heuristically") }))
     }
 
+    func testRemoteDiarizationAssignsMultipleRemoteSpeakerLabelsAndMovesLocalSpeakerAfterThem() throws {
+        let root = try makeTemporaryDirectory()
+        let settings = try makeSettings(root: root, computeMode: .auto)
+        let session = makeSession(
+            audioSourceType: .appAudioPlusMicrophone,
+            microphonePath: root.appendingPathComponent("microphone.flac").path,
+            systemAudioPath: root.appendingPathComponent("system.flac").path
+        )
+
+        let fakeTranscriber = FakeAudioTranscriber(
+            responses: [
+                root.appendingPathComponent("system.flac").path: WhisperTranscription(
+                    text: "Remote one. Remote two. Remote three.",
+                    language: "en",
+                    segments: [
+                        WhisperSegment(startTime: 0.0, endTime: 1.5, text: "Remote one"),
+                        WhisperSegment(startTime: 2.0, endTime: 3.5, text: "Remote two"),
+                        WhisperSegment(startTime: 4.0, endTime: 5.5, text: "Remote three")
+                    ],
+                    engineDescription: "fake-whisper",
+                    notes: []
+                ),
+                root.appendingPathComponent("microphone.flac").path: WhisperTranscription(
+                    text: "Local speaker here",
+                    language: "en",
+                    segments: [
+                        WhisperSegment(startTime: 1.7, endTime: 2.1, text: "Local speaker here")
+                    ],
+                    engineDescription: "fake-whisper",
+                    notes: []
+                )
+            ]
+        )
+
+        let fakeDiarizer = FakeRemoteSpeakerDiarizer(
+            turnsByPath: [
+                root.appendingPathComponent("system.flac").path: [
+                    RemoteSpeakerTurn(startTime: 0.0, endTime: 1.6, clusterID: "cluster-a"),
+                    RemoteSpeakerTurn(startTime: 2.0, endTime: 3.6, clusterID: "cluster-b"),
+                    RemoteSpeakerTurn(startTime: 4.0, endTime: 5.6, clusterID: "cluster-c")
+                ]
+            ]
+        )
+
+        let service = TranscriptionService(
+            whisperTranscriber: fakeTranscriber,
+            remoteSpeakerDiarizer: fakeDiarizer
+        )
+        let plan = service.makePlan(for: session)
+        let content = try service.transcribe(plan: plan, session: session, settings: settings)
+
+        XCTAssertEqual(content.speakersDetected, 4)
+        XCTAssertEqual(content.segments.map(\.speakerLabel), ["Speaker1", "Speaker4", "Speaker2", "Speaker3"])
+        XCTAssertTrue(content.analysis.notes.contains(where: { $0.contains("remote speaker cluster") }))
+    }
+
     private func makeSettings(root: URL, computeMode: TranscriptionComputeMode) throws -> AppSettings {
         let settings = AppSettings(
             storageRootFolder: root.path,
@@ -210,5 +266,13 @@ private struct FakeAudioTranscriber: AudioTranscribing {
             throw AppError.transcriptionExecutionFailed("Missing fake transcription for \(audioFileURL.path)")
         }
         return response
+    }
+}
+
+private struct FakeRemoteSpeakerDiarizer: RemoteSpeakerDiarizing {
+    let turnsByPath: [String: [RemoteSpeakerTurn]]
+
+    func diarizeSystemAudio(audioFileURL: URL) throws -> [RemoteSpeakerTurn] {
+        turnsByPath[audioFileURL.path] ?? []
     }
 }

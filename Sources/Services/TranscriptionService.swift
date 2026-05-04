@@ -2,9 +2,14 @@ import Foundation
 
 struct TranscriptionService {
     private let whisperTranscriber: AudioTranscribing
+    private let remoteSpeakerDiarizer: RemoteSpeakerDiarizing
 
-    init(whisperTranscriber: AudioTranscribing = WhisperCLITranscriber()) {
+    init(
+        whisperTranscriber: AudioTranscribing = WhisperCLITranscriber(),
+        remoteSpeakerDiarizer: RemoteSpeakerDiarizing = NoOpRemoteSpeakerDiarizer()
+    ) {
         self.whisperTranscriber = whisperTranscriber
+        self.remoteSpeakerDiarizer = remoteSpeakerDiarizer
     }
 
     func makePlan(for session: SessionRecord) -> TranscriptionPlan {
@@ -138,18 +143,16 @@ struct TranscriptionService {
         var engineDescriptions: [String] = []
         var detectedLanguagesBySource: [String: String] = [:]
         var executionNotes: [String] = []
+        var remoteSpeakerSlotCount = 1
 
         for source in plan.preferredSources {
             let fileURL: URL?
-            let speakerLabel: String
 
             switch source {
             case .microphone:
                 fileURL = plan.microphoneFileURL
-                speakerLabel = plan.audioSourceType == .microphoneOnly ? "Speaker1" : "Speaker2"
             case .systemAudio:
                 fileURL = plan.systemAudioFileURL
-                speakerLabel = "Speaker1"
             }
 
             guard let fileURL else { continue }
@@ -162,17 +165,37 @@ struct TranscriptionService {
                 detectedLanguagesBySource[source.rawValue] = normalizedLanguage
             }
 
-            let mappedSegments = transcription.segments.map { segment in
-                MergeCandidateSegment(
-                    id: UUID(),
-                    absoluteTimestamp: sessionStart.addingTimeInterval(segment.startTime),
-                    relativeOffset: segment.startTime,
-                    relativeEndOffset: max(segment.endTime, segment.startTime),
-                    speakerLabel: speakerLabel,
-                    source: source.rawValue,
-                    text: segment.text,
-                    lowConfidence: false,
-                    sourcePriority: source == .systemAudio ? 0 : 1
+            let mappedSegments: [MergeCandidateSegment]
+            switch source {
+            case .systemAudio:
+                let diarizationTurns = (try? remoteSpeakerDiarizer.diarizeSystemAudio(audioFileURL: fileURL)) ?? []
+                if diarizationTurns.isEmpty {
+                    mappedSegments = mapSegments(
+                        transcription.segments,
+                        sessionStart: sessionStart,
+                        speakerLabel: "Speaker1",
+                        source: source
+                    )
+                } else {
+                    let clustered = mapSystemAudioSegments(
+                        transcription.segments,
+                        sessionStart: sessionStart,
+                        source: source,
+                        diarizationTurns: diarizationTurns
+                    )
+                    mappedSegments = clustered.segments
+                    remoteSpeakerSlotCount = max(remoteSpeakerSlotCount, clustered.remoteSpeakerCount)
+                    executionNotes.append("LoqBar aligned \(clustered.remoteSpeakerCount) remote speaker cluster\(clustered.remoteSpeakerCount == 1 ? "" : "s") from the local diarization stage onto the system-audio transcript.")
+                }
+            case .microphone:
+                let localSpeakerLabel = plan.audioSourceType == .microphoneOnly
+                    ? "Speaker1"
+                    : "Speaker\(max(remoteSpeakerSlotCount, 1) + 1)"
+                mappedSegments = mapSegments(
+                    transcription.segments,
+                    sessionStart: sessionStart,
+                    speakerLabel: localSpeakerLabel,
+                    source: source
                 )
             }
 
@@ -486,6 +509,104 @@ struct TranscriptionService {
         }
 
         return []
+    }
+
+    private func mapSegments(
+        _ segments: [WhisperSegment],
+        sessionStart: Date,
+        speakerLabel: String,
+        source: PreferredTranscriptSource
+    ) -> [MergeCandidateSegment] {
+        segments.map { segment in
+            MergeCandidateSegment(
+                id: UUID(),
+                absoluteTimestamp: sessionStart.addingTimeInterval(segment.startTime),
+                relativeOffset: segment.startTime,
+                relativeEndOffset: max(segment.endTime, segment.startTime),
+                speakerLabel: speakerLabel,
+                source: source.rawValue,
+                text: segment.text,
+                lowConfidence: false,
+                sourcePriority: source == .systemAudio ? 0 : 1
+            )
+        }
+    }
+
+    private func mapSystemAudioSegments(
+        _ segments: [WhisperSegment],
+        sessionStart: Date,
+        source: PreferredTranscriptSource,
+        diarizationTurns: [RemoteSpeakerTurn]
+    ) -> (segments: [MergeCandidateSegment], remoteSpeakerCount: Int) {
+        let orderedClusters = orderedRemoteClusterIDs(from: diarizationTurns)
+        let clusterSpeakerLabels = Dictionary(
+            uniqueKeysWithValues: orderedClusters.enumerated().map { index, clusterID in
+                (clusterID, "Speaker\(index + 1)")
+            }
+        )
+
+        let mapped = segments.map { segment in
+            let clusterID = bestClusterID(for: segment, diarizationTurns: diarizationTurns)
+            let speakerLabel = clusterID.flatMap { clusterSpeakerLabels[$0] } ?? "Speaker1"
+
+            return MergeCandidateSegment(
+                id: UUID(),
+                absoluteTimestamp: sessionStart.addingTimeInterval(segment.startTime),
+                relativeOffset: segment.startTime,
+                relativeEndOffset: max(segment.endTime, segment.startTime),
+                speakerLabel: speakerLabel,
+                source: source.rawValue,
+                text: segment.text,
+                lowConfidence: false,
+                sourcePriority: source == .systemAudio ? 0 : 1
+            )
+        }
+
+        return (mapped, max(clusterSpeakerLabels.count, 1))
+    }
+
+    private func orderedRemoteClusterIDs(from turns: [RemoteSpeakerTurn]) -> [String] {
+        var ordered: [String] = []
+        for turn in turns.sorted(by: { $0.startTime < $1.startTime }) {
+            if !ordered.contains(turn.clusterID) {
+                ordered.append(turn.clusterID)
+            }
+        }
+        return ordered
+    }
+
+    private func bestClusterID(for segment: WhisperSegment, diarizationTurns: [RemoteSpeakerTurn]) -> String? {
+        let segmentStart = segment.startTime
+        let segmentEnd = max(segment.endTime, segment.startTime)
+        var bestCluster: String?
+        var bestOverlap: TimeInterval = 0
+
+        for turn in diarizationTurns {
+            let overlap = overlappingDuration(
+                lhsStart: segmentStart,
+                lhsEnd: segmentEnd,
+                rhsStart: turn.startTime,
+                rhsEnd: max(turn.endTime, turn.startTime)
+            )
+
+            if overlap > bestOverlap {
+                bestOverlap = overlap
+                bestCluster = turn.clusterID
+            }
+        }
+
+        return bestCluster
+    }
+
+    private func overlappingDuration(
+        lhsStart: TimeInterval,
+        lhsEnd: TimeInterval,
+        rhsStart: TimeInterval,
+        rhsEnd: TimeInterval
+    ) -> TimeInterval {
+        let start = max(lhsStart, rhsStart)
+        let end = min(lhsEnd, rhsEnd)
+        return max(0, end - start)
     }
 
     private func suggestedSpeakerRosterCount(
